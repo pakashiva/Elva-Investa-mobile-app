@@ -1,0 +1,469 @@
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+  Alert,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { StatusBar } from 'expo-status-bar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import DocumentUploadField from '../../components/registration/DocumentUploadField';
+import RegistrationDateField from '../../components/registration/RegistrationDateField';
+import RegistrationSectionHeader from '../../components/registration/RegistrationSectionHeader';
+import RegistrationTextField from '../../components/registration/RegistrationTextField';
+import FormSelectField from '../../components/form/FormSelectField';
+import FormCheckbox from '../../components/form/FormCheckbox';
+import {
+  REGISTRATION_AUTHORIZATION_TEXT,
+  REGISTRATION_FORM_DEFAULTS,
+  REGISTRATION_SECURITY_TEXT,
+  RELATIONSHIP_OPTIONS,
+} from '../../data/registrationForm';
+import { RootStackScreenProps } from '../../navigation/types';
+import {
+  DocumentUploadValue,
+  RegistrationFormErrors,
+} from '../../types/registrationForm';
+import { authColors } from '../../theme/authColors';
+import { colors, spacing } from '../../theme/colors';
+import { pickDocumentImage } from '../../utils/pickImage';
+import {
+  hasFormErrors,
+  validateRegistrationForm,
+} from '../../utils/validateRegistrationForm';
+
+type Props = RootStackScreenProps<'CreateAccount'>;
+
+type UploadKey = 'aadhaarFront' | 'aadhaarBack' | 'panCard';
+
+export default function CreateAccountScreen({ navigation }: Props) {
+  const insets = useSafeAreaInsets();
+  const [form, setForm] = useState(REGISTRATION_FORM_DEFAULTS);
+  const [errors, setErrors] = useState<RegistrationFormErrors>({});
+  const [uploadingKey, setUploadingKey] = useState<UploadKey | null>(null);
+
+  const updateField = <K extends keyof typeof form>(
+    key: K,
+    value: (typeof form)[K]
+  ) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+    if (errors[key]) {
+      setErrors((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+    }
+  };
+
+  const handleDocumentUpload = async (key: UploadKey) => {
+    setUploadingKey(key);
+    const picked = await pickDocumentImage();
+    setUploadingKey(null);
+
+    if (!picked) {
+      return;
+    }
+
+    const nextValue: DocumentUploadValue = {
+      uri: picked.uri,
+      fileName: picked.fileName,
+      isUserSelected: true,
+    };
+
+    updateField(key, nextValue);
+  };
+
+  const handleSubmit = () => {
+    const nextErrors = validateRegistrationForm(form);
+    setErrors(nextErrors);
+
+    if (hasFormErrors(nextErrors)) {
+      Alert.alert(
+        'Check your form',
+        'Please complete all required fields and fix any errors before submitting.'
+      );
+      return;
+    }
+
+    navigation.navigate('VerifyMobileNumber');
+  };
+
+  return (
+    <View style={styles.safe}>
+      <StatusBar style="light" />
+
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+        <TouchableOpacity
+          style={styles.backBtn}
+          activeOpacity={0.7}
+          onPress={() => navigation.goBack()}
+        >
+          <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Create Account</Text>
+      </View>
+
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: insets.bottom + 32 },
+          ]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.securityBanner}>
+            <Ionicons
+              name="shield-checkmark"
+              size={18}
+              color={colors.successText}
+            />
+            <Text style={styles.securityText}>{REGISTRATION_SECURITY_TEXT}</Text>
+          </View>
+
+          <RegistrationSectionHeader
+            number={1}
+            title="Personal Details"
+            description="Enter your legal details as per official documents"
+          />
+
+          <RegistrationTextField
+            label="Full Name"
+            required
+            value={form.fullName}
+            onChangeText={(text) => updateField('fullName', text)}
+            error={errors.fullName}
+            autoCapitalize="words"
+          />
+          <RegistrationTextField
+            label="Mobile Number"
+            required
+            value={form.mobileNumber}
+            onChangeText={(text) => updateField('mobileNumber', text)}
+            error={errors.mobileNumber}
+            keyboardType="phone-pad"
+          />
+          <RegistrationTextField
+            label="Email Address"
+            required
+            value={form.emailAddress}
+            onChangeText={(text) => updateField('emailAddress', text)}
+            error={errors.emailAddress}
+            autoCapitalize="none"
+            keyboardType="email-address"
+          />
+          <RegistrationDateField
+            label="Date of Birth"
+            required
+            value={form.dateOfBirth}
+            onChange={(value) => updateField('dateOfBirth', value)}
+            error={errors.dateOfBirth}
+          />
+          <RegistrationTextField
+            label="Address"
+            required
+            value={form.address}
+            onChangeText={(text) => updateField('address', text)}
+            error={errors.address}
+          />
+
+          <View style={styles.row}>
+            <View style={styles.half}>
+              <RegistrationTextField
+                label="City"
+                required
+                value={form.city}
+                onChangeText={(text) => updateField('city', text)}
+                error={errors.city}
+              />
+            </View>
+            <View style={styles.half}>
+              <RegistrationTextField
+                label="State"
+                required
+                value={form.state}
+                onChangeText={(text) => updateField('state', text)}
+                error={errors.state}
+              />
+            </View>
+          </View>
+
+          <RegistrationTextField
+            label="PIN Code"
+            required
+            value={form.pinCode}
+            onChangeText={(text) =>
+              updateField('pinCode', text.replace(/[^\d]/g, ''))
+            }
+            error={errors.pinCode}
+            keyboardType="number-pad"
+          />
+
+          <RegistrationSectionHeader
+            number={2}
+            title="KYC Documents Verification"
+            description="For compliance and taxation laws"
+          />
+
+          <RegistrationTextField
+            label="Aadhaar Card Number"
+            required
+            value={form.aadhaarNumber}
+            onChangeText={(text) => updateField('aadhaarNumber', text)}
+            error={errors.aadhaarNumber}
+            keyboardType="number-pad"
+          />
+
+          <View style={styles.uploadRow}>
+            <DocumentUploadField
+              label="Upload Aadhaar Front"
+              value={form.aadhaarFront}
+              onPress={() => handleDocumentUpload('aadhaarFront')}
+              loading={uploadingKey === 'aadhaarFront'}
+              error={errors.aadhaarFront}
+              compact
+            />
+            <DocumentUploadField
+              label="Upload Aadhaar Back"
+              value={form.aadhaarBack}
+              onPress={() => handleDocumentUpload('aadhaarBack')}
+              loading={uploadingKey === 'aadhaarBack'}
+              error={errors.aadhaarBack}
+              compact
+            />
+          </View>
+
+          <RegistrationTextField
+            label="PAN Card Number"
+            required
+            value={form.panNumber}
+            onChangeText={(text) => updateField('panNumber', text.toUpperCase())}
+            error={errors.panNumber}
+            autoCapitalize="characters"
+          />
+
+          <DocumentUploadField
+            label="Upload PAN Card"
+            value={form.panCard}
+            onPress={() => handleDocumentUpload('panCard')}
+            loading={uploadingKey === 'panCard'}
+            error={errors.panCard}
+          />
+
+          <RegistrationSectionHeader
+            number={3}
+            title="Bank Account Details"
+            description="For easy deposits and secure payouts"
+          />
+
+          <RegistrationTextField
+            label="Account Holder Name"
+            required
+            value={form.accountHolderName}
+            onChangeText={(text) => updateField('accountHolderName', text)}
+            error={errors.accountHolderName}
+            autoCapitalize="words"
+          />
+          <RegistrationTextField
+            label="Account Number"
+            required
+            value={form.accountNumber}
+            onChangeText={(text) =>
+              updateField('accountNumber', text.replace(/[^\d]/g, ''))
+            }
+            error={errors.accountNumber}
+            keyboardType="number-pad"
+          />
+          <RegistrationTextField
+            label="Confirm Account Number"
+            required
+            value={form.confirmAccountNumber}
+            onChangeText={(text) =>
+              updateField('confirmAccountNumber', text.replace(/[^\d]/g, ''))
+            }
+            error={errors.confirmAccountNumber}
+            keyboardType="number-pad"
+          />
+          <RegistrationTextField
+            label="IFSC Code"
+            required
+            value={form.ifscCode}
+            onChangeText={(text) => updateField('ifscCode', text.toUpperCase())}
+            error={errors.ifscCode}
+            autoCapitalize="characters"
+          />
+          <RegistrationTextField
+            label="Bank Name"
+            required
+            value={form.bankName}
+            readOnly
+            error={errors.bankName}
+          />
+
+          <RegistrationSectionHeader
+            number={4}
+            title="Nominee Details"
+            description="Nominate a successor for your digital assets"
+          />
+
+          <RegistrationTextField
+            label="Nominee Name"
+            required
+            value={form.nomineeName}
+            onChangeText={(text) => updateField('nomineeName', text)}
+            error={errors.nomineeName}
+            autoCapitalize="words"
+          />
+
+          <FormSelectField
+            label="Relationship"
+            required
+            placeholder="Select relationship"
+            value={form.relationship}
+            options={RELATIONSHIP_OPTIONS}
+            onChange={(id) => updateField('relationship', id)}
+          />
+          {errors.relationship ? (
+            <Text style={styles.fieldError}>{errors.relationship}</Text>
+          ) : null}
+
+          <RegistrationTextField
+            label="Nominee Aadhaar Number"
+            required
+            value={form.nomineeAadhaar}
+            onChangeText={(text) => updateField('nomineeAadhaar', text)}
+            error={errors.nomineeAadhaar}
+            keyboardType="number-pad"
+          />
+          <RegistrationTextField
+            label="Nominee Percentage"
+            required
+            value={form.nomineePercentage}
+            onChangeText={(text) => updateField('nomineePercentage', text)}
+            error={errors.nomineePercentage}
+          />
+
+          <FormCheckbox
+            checked={form.authorized}
+            onChange={(next) => updateField('authorized', next)}
+            checkedColor={authColors.header}
+            label={REGISTRATION_AUTHORIZATION_TEXT}
+          />
+          {errors.authorized ? (
+            <Text style={styles.fieldError}>{errors.authorized}</Text>
+          ) : null}
+
+          <TouchableOpacity
+            style={styles.submitBtn}
+            activeOpacity={0.85}
+            onPress={handleSubmit}
+          >
+            <Text style={styles.submitText}>Submit Registration</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  flex: {
+    flex: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: authColors.header,
+    paddingHorizontal: spacing.screen,
+    paddingBottom: 14,
+    gap: 10,
+  },
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitle: {
+    flex: 1,
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  scroll: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: spacing.screen,
+    paddingTop: 16,
+  },
+  securityBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    backgroundColor: colors.successBg,
+    borderWidth: 1,
+    borderColor: '#B7E4C7',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    marginBottom: 22,
+  },
+  securityText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.successText,
+    fontWeight: '500',
+  },
+  row: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  half: {
+    flex: 1,
+  },
+  uploadRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 16,
+  },
+  fieldError: {
+    marginTop: -10,
+    marginBottom: 12,
+    fontSize: 12,
+    color: '#FF3B30',
+  },
+  submitBtn: {
+    height: 52,
+    borderRadius: 12,
+    backgroundColor: authColors.header,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+    marginBottom: 8,
+  },
+  submitText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+});

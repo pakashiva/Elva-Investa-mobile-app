@@ -1,0 +1,224 @@
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+} from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import BrandLogo from '../../components/auth/BrandLogo';
+import SignInTextField from '../../components/auth/SignInTextField';
+import { SIGN_IN_DEFAULTS } from '../../data/auth';
+import { RootStackScreenProps } from '../../navigation/types';
+import { authColors } from '../../theme/authColors';
+
+type Props = RootStackScreenProps<'SignIn'>;
+
+export default function SignInScreen({ navigation }: Props) {
+  const insets = useSafeAreaInsets();
+  const [mobileOrEmail, setMobileOrEmail] = useState(
+    SIGN_IN_DEFAULTS.mobileOrEmail
+  );
+  const [password, setPassword] = useState(SIGN_IN_DEFAULTS.password);
+
+  const handleSignIn = () => {
+    navigation.replace('MainTabs');
+  };
+
+  const handleForgotPassword = () => {
+    navigation.navigate('VerifyMobileNumber');
+  };
+
+  return (
+    <View style={styles.safe}>
+      <StatusBar style="light" />
+
+      <View style={[styles.header, { paddingTop: insets.top + 28 }]}>
+        <BrandLogo />
+        <Text style={styles.brandTitle}>Venkatesh Traders</Text>
+        <Text style={styles.brandTagline}>
+          Secure investments, premium returns
+        </Text>
+      </View>
+
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView
+          style={styles.formSection}
+          contentContainerStyle={styles.formContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <Text style={styles.welcome}>Welcome</Text>
+          <Text style={styles.welcomeSubtitle}>
+            Sign in to manage your investments
+          </Text>
+
+          <SignInTextField
+            label="Mobile Number / Email"
+            value={mobileOrEmail}
+            onChangeText={setMobileOrEmail}
+            placeholder="Enter your mobile or email"
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="email-address"
+            returnKeyType="next"
+          />
+
+          <SignInTextField
+            label="Password"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+            returnKeyType="done"
+            onSubmitEditing={handleSignIn}
+          />
+
+          <TouchableOpacity
+            style={styles.forgotBtn}
+            activeOpacity={0.7}
+            onPress={handleForgotPassword}
+          >
+            <Text style={styles.forgotText}>Forgot Password?</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.signInBtn}
+            activeOpacity={0.85}
+            onPress={handleSignIn}
+          >
+            <Text style={styles.signInText}>Sign In</Text>
+          </TouchableOpacity>
+
+          <View style={styles.orRow}>
+            <View style={styles.orLine} />
+            <Text style={styles.orText}>OR</Text>
+            <View style={styles.orLine} />
+          </View>
+
+          <View style={styles.registerRow}>
+            <Text style={styles.registerPrompt}>Don&apos;t have an account? </Text>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => navigation.navigate('CreateAccount')}
+            >
+              <Text style={styles.registerLink}>Register Now</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  flex: {
+    flex: 1,
+  },
+  header: {
+    backgroundColor: authColors.header,
+    alignItems: 'center',
+    paddingBottom: 36,
+    paddingHorizontal: 24,
+  },
+  brandTitle: {
+    fontSize: 26,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: -0.3,
+    marginBottom: 8,
+  },
+  brandTagline: {
+    fontSize: 14,
+    color: authColors.gold,
+    fontWeight: '500',
+  },
+  formSection: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  formContent: {
+    paddingHorizontal: 24,
+    paddingTop: 32,
+    paddingBottom: 32,
+  },
+  welcome: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: authColors.textDark,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  welcomeSubtitle: {
+    fontSize: 14,
+    color: authColors.textMuted,
+    textAlign: 'center',
+    marginBottom: 28,
+    lineHeight: 20,
+  },
+  forgotBtn: {
+    alignSelf: 'flex-end',
+    marginTop: -6,
+    marginBottom: 22,
+  },
+  forgotText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: authColors.gold,
+  },
+  signInBtn: {
+    height: 52,
+    borderRadius: 12,
+    backgroundColor: authColors.header,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 28,
+  },
+  signInText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  orRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  orLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: authColors.divider,
+  },
+  orText: {
+    marginHorizontal: 14,
+    fontSize: 12,
+    fontWeight: '600',
+    color: authColors.textLight,
+    letterSpacing: 0.5,
+  },
+  registerRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
+  registerPrompt: {
+    fontSize: 14,
+    color: authColors.textMuted,
+  },
+  registerLink: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: authColors.gold,
+  },
+});
