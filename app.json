@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Investment Dashboard",
+    "name": "Venkatesh Traders",
     "slug": "mobile-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -18,21 +18,20 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "package": "com.pakashiva.mobileapp"
     },
     "plugins": [
-      [
-        "expo-image-picker",
-        {
-          "photosPermission": "Allow access to your photos to upload KYC documents."
-        }
-      ]
+      "@react-native-community/datetimepicker",
+      "expo-font"
     ],
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": [
-      "@react-native-community/datetimepicker"
-    ]
+    "extra": {
+      "eas": {
+        "projectId": "3f958438-fa09-4245-ae4d-bdb16cb9e278"
+      }
+    }
   }
 }

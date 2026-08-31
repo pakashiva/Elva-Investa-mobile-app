@@ -1,11 +1,13 @@
+// More -> Bank details -> Add bank account
+
 import { AddBankAccountFormValues } from '../types/bankAccountForm';
 
 /** Initial dummy values shown in the reference design */
 export const ADD_BANK_ACCOUNT_DEFAULTS: AddBankAccountFormValues = {
-  accountHolderName: 'Rajesh Kumar',
-  accountNumber: '5010024984523',
+  accountHolderName: '',
+  accountNumber: '',
   confirmAccountNumber: '',
-  ifscCode: 'HDFC0000124',
+  ifscCode: '',
   accountType: 'Savings',
   authorized: true,
 };

@@ -1,3 +1,5 @@
+// Add Funds -> Add new
+
 import { BankAccount, Nominee } from '../types/fundRequest';
 
 /** Temporary dummy options — will be replaced by backend later */

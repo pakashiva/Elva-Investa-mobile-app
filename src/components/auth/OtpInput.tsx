@@ -1,11 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View,
+  Text,
   TextInput,
   StyleSheet,
   Pressable,
-  NativeSyntheticEvent,
-  TextInputKeyPressEventData,
+  Platform,
 } from 'react-native';
 import { authColors } from '../../theme/authColors';
 
@@ -17,117 +17,98 @@ type Props = {
 };
 
 export default function OtpInput({ value, onChange }: Props) {
-  const refs = useRef<(TextInput | null)[]>([]);
-  const [focusedIndex, setFocusedIndex] = useState(
-    Math.min(value.length, OTP_LENGTH - 1)
+  const inputRef = useRef<TextInput>(null);
+  const [isFocused, setIsFocused] = useState(false);
+
+  const digits = Array.from(
+    { length: OTP_LENGTH },
+    (_, index) => value[index] ?? ''
   );
 
-  const digits = Array.from({ length: OTP_LENGTH }, (_, index) => value[index] ?? '');
+  const activeIndex = isFocused
+    ? value.length < OTP_LENGTH
+      ? value.length
+      : OTP_LENGTH - 1
+    : -1;
 
-  useEffect(() => {
-    refs.current[focusedIndex]?.focus();
-  }, [focusedIndex]);
-
-  const updateDigit = (index: number, digit: string) => {
-    const chars = digits.slice();
-    chars[index] = digit;
-    const nextValue = chars.join('').replace(/\s/g, '');
-    onChange(nextValue);
-
-    if (digit && index < OTP_LENGTH - 1) {
-      setFocusedIndex(index + 1);
-    }
+  const focusInput = () => {
+    inputRef.current?.focus();
   };
 
-  const handleChange = (text: string, index: number) => {
-    const cleaned = text.replace(/\D/g, '');
-    if (!cleaned) {
-      updateDigit(index, '');
-      return;
-    }
-
-    if (cleaned.length > 1) {
-      let next = value.slice(0, index);
-      for (const char of cleaned) {
-        if (next.length < OTP_LENGTH) {
-          next += char;
-        }
-      }
-      onChange(next);
-      setFocusedIndex(Math.min(next.length, OTP_LENGTH - 1));
-      return;
-    }
-
-    updateDigit(index, cleaned);
+  const handleChange = (text: string) => {
+    const cleaned = text.replace(/\D/g, '').slice(0, OTP_LENGTH);
+    onChange(cleaned);
   };
 
-  const handleKeyPress = (
-    event: NativeSyntheticEvent<TextInputKeyPressEventData>,
-    index: number
-  ) => {
-    if (event.nativeEvent.key !== 'Backspace') {
-      return;
-    }
+  const handleBoxPress = () => {
+    focusInput();
+  };
 
-    if (digits[index]) {
-      const chars = digits.slice();
-      chars[index] = '';
-      onChange(chars.join(''));
-      return;
-    }
-
-    if (index > 0) {
-      const chars = digits.slice();
-      chars[index - 1] = '';
-      onChange(chars.join(''));
-      setFocusedIndex(index - 1);
-    }
+  const handleFocus = () => {
+    setIsFocused(true);
   };
 
   return (
-    <View style={styles.row}>
-      {digits.map((digit, index) => {
-        const isFocused = focusedIndex === index;
-        return (
-          <Pressable
-            key={index}
-            style={[
-              styles.box,
-              isFocused && styles.boxFocused,
-              digit ? styles.boxFilled : null,
-            ]}
-            onPress={() => setFocusedIndex(index)}
-          >
-            <TextInput
-              ref={(ref) => {
-                refs.current[index] = ref;
-              }}
-              style={styles.input}
-              value={digit}
-              onChangeText={(text) => handleChange(text, index)}
-              onKeyPress={(event) => handleKeyPress(event, index)}
-              onFocus={() => setFocusedIndex(index)}
-              keyboardType="number-pad"
-              maxLength={index === 0 ? OTP_LENGTH : 1}
-              selectTextOnFocus
-              caretHidden={false}
-            />
-          </Pressable>
-        );
-      })}
+    <View style={styles.wrap}>
+      <TextInput
+        ref={inputRef}
+        value={value}
+        onChangeText={handleChange}
+        onFocus={handleFocus}
+        onBlur={() => setIsFocused(false)}
+        keyboardType="number-pad"
+        maxLength={OTP_LENGTH}
+        style={styles.hiddenInput}
+        caretHidden
+        autoComplete={Platform.OS === 'android' ? 'sms-otp' : 'one-time-code'}
+        textContentType="oneTimeCode"
+        importantForAutofill="yes"
+      />
+
+      <Pressable style={styles.row} onPress={focusInput}>
+        {digits.map((digit, index) => {
+          const isActive = activeIndex === index;
+          return (
+            <Pressable
+              key={index}
+              style={[
+                styles.box,
+                isActive && styles.boxFocused,
+                digit !== '' && styles.boxFilled,
+              ]}
+              onPress={handleBoxPress}
+            >
+              <Text style={styles.digitText}>{digit}</Text>
+            </Pressable>
+          );
+        })}
+      </Pressable>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  wrap: {
+    position: 'relative',
+    marginBottom: 18,
+  },
+  hiddenInput: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 52,
+    opacity: 0,
+    color: 'transparent',
+  },
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: 8,
-    marginBottom: 18,
   },
   box: {
     flex: 1,
+    minWidth: 44,
     maxWidth: 48,
     height: 52,
     borderRadius: 10,
@@ -145,13 +126,13 @@ const styles = StyleSheet.create({
   boxFilled: {
     backgroundColor: '#FFFFFF',
   },
-  input: {
-    width: '100%',
-    height: '100%',
-    textAlign: 'center',
+  digitText: {
     fontSize: 20,
     fontWeight: '700',
     color: authColors.header,
-    padding: 0,
+    textAlign: 'center',
+    lineHeight: 24,
+    minHeight: 24,
+    minWidth: 14,
   },
 });
