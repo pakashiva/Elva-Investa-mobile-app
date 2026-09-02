@@ -8,10 +8,12 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AccountTypeSelector from '../../components/bank/AccountTypeSelector';
 import DocumentUploadField from '../../components/registration/DocumentUploadField';
 import RegistrationDateField from '../../components/registration/RegistrationDateField';
 import RegistrationSectionHeader from '../../components/registration/RegistrationSectionHeader';
@@ -21,9 +23,13 @@ import FormCheckbox from '../../components/form/FormCheckbox';
 import {
   REGISTRATION_AUTHORIZATION_TEXT,
   REGISTRATION_FORM_DEFAULTS,
+  REGISTRATION_PASSWORD_HINT,
   REGISTRATION_SECURITY_TEXT,
   RELATIONSHIP_OPTIONS,
 } from '../../data/registrationForm';
+import PasswordInput from '../../components/auth/PasswordInput';
+import { registerUser } from '../../services/registrationService';
+import { detectBankNameFromIfsc } from '../../utils/bankName';
 import { RootStackScreenProps } from '../../navigation/types';
 import {
   DocumentUploadValue,
@@ -46,6 +52,7 @@ export default function CreateAccountScreen({ navigation }: Props) {
   const [form, setForm] = useState(REGISTRATION_FORM_DEFAULTS);
   const [errors, setErrors] = useState<RegistrationFormErrors>({});
   const [uploadingKey, setUploadingKey] = useState<UploadKey | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const updateField = <K extends keyof typeof form>(
     key: K,
@@ -79,7 +86,7 @@ export default function CreateAccountScreen({ navigation }: Props) {
     updateField(key, nextValue);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const nextErrors = validateRegistrationForm(form);
     setErrors(nextErrors);
 
@@ -91,7 +98,20 @@ export default function CreateAccountScreen({ navigation }: Props) {
       return;
     }
 
-    navigation.navigate('VerifyMobileNumber');
+    setIsSubmitting(true);
+
+    try {
+      await registerUser(form);
+      navigation.replace('VerifyMobileNumber', { mode: 'registration' });
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Registration failed. Please try again.';
+      Alert.alert('Registration failed', message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -298,15 +318,44 @@ export default function CreateAccountScreen({ navigation }: Props) {
             label="IFSC Code"
             required
             value={form.ifscCode}
-            onChangeText={(text) => updateField('ifscCode', text.toUpperCase())}
+            onChangeText={(text) => {
+              const nextIfsc = text.toUpperCase();
+              const detectedBank = detectBankNameFromIfsc(nextIfsc);
+              setForm((prev) => ({
+                ...prev,
+                ifscCode: nextIfsc,
+                ...(detectedBank ? { bankName: detectedBank } : {}),
+              }));
+              if (errors.ifscCode) {
+                setErrors((prev) => {
+                  const next = { ...prev };
+                  delete next.ifscCode;
+                  return next;
+                });
+              }
+              if (detectedBank && errors.bankName) {
+                setErrors((prev) => {
+                  const next = { ...prev };
+                  delete next.bankName;
+                  return next;
+                });
+              }
+            }}
             error={errors.ifscCode}
             autoCapitalize="characters"
           />
+
+          <AccountTypeSelector
+            value={form.accountType}
+            onChange={(type) => updateField('accountType', type)}
+          />
+
           <RegistrationTextField
             label="Bank Name"
             required
             value={form.bankName}
-            readOnly
+            onChangeText={(text) => updateField('bankName', text)}
+            placeholder="Auto-detected from IFSC or enter manually"
             error={errors.bankName}
           />
 
@@ -353,6 +402,40 @@ export default function CreateAccountScreen({ navigation }: Props) {
             error={errors.nomineePercentage}
           />
 
+          <RegistrationSectionHeader
+            number={5}
+            title="Set Your Password"
+            description="Create a password to sign in to your account"
+          />
+
+          <PasswordInput
+            label="Password"
+            required
+            value={form.password}
+            onChangeText={(text) => updateField('password', text)}
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="next"
+          />
+          {errors.password ? (
+            <Text style={styles.fieldError}>{errors.password}</Text>
+          ) : null}
+
+          <PasswordInput
+            label="Confirm Password"
+            required
+            value={form.confirmPassword}
+            onChangeText={(text) => updateField('confirmPassword', text)}
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="done"
+          />
+          {errors.confirmPassword ? (
+            <Text style={styles.fieldError}>{errors.confirmPassword}</Text>
+          ) : null}
+
+          <Text style={styles.passwordHint}>{REGISTRATION_PASSWORD_HINT}</Text>
+
           <FormCheckbox
             checked={form.authorized}
             onChange={(next) => updateField('authorized', next)}
@@ -364,11 +447,16 @@ export default function CreateAccountScreen({ navigation }: Props) {
           ) : null}
 
           <TouchableOpacity
-            style={styles.submitBtn}
+            style={[styles.submitBtn, isSubmitting && styles.submitBtnDisabled]}
             activeOpacity={0.85}
             onPress={handleSubmit}
+            disabled={isSubmitting}
           >
-            <Text style={styles.submitText}>Submit Registration</Text>
+            {isSubmitting ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.submitText}>Submit Registration</Text>
+            )}
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -452,6 +540,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#FF3B30',
   },
+  passwordHint: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: authColors.textMuted,
+    marginTop: -8,
+    marginBottom: 16,
+  },
   submitBtn: {
     height: 52,
     borderRadius: 12,
@@ -460,6 +555,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: 8,
     marginBottom: 8,
+  },
+  submitBtnDisabled: {
+    opacity: 0.7,
   },
   submitText: {
     fontSize: 16,

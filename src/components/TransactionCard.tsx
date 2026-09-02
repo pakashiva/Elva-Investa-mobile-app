@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { Transaction } from '../data/transactions';
+import { Transaction } from '../types/transaction';
 import { colors } from '../theme/colors';
 
 type Props = {

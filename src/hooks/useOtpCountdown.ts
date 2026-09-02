@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 function formatCountdown(seconds: number): string {
   const mins = Math.floor(seconds / 60);
@@ -8,23 +8,43 @@ function formatCountdown(seconds: number): string {
 
 export function useOtpCountdown(initialSeconds: number) {
   const [secondsLeft, setSecondsLeft] = useState(initialSeconds);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setSecondsLeft((prev) => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
-
-    return () => clearInterval(timer);
+  const clearTimer = useCallback(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
   }, []);
 
-  const reset = () => {
-    setSecondsLeft(initialSeconds);
-  };
+  const startTimer = useCallback(
+    (seconds: number) => {
+      clearTimer();
+      setSecondsLeft(seconds);
+      intervalRef.current = setInterval(() => {
+        setSecondsLeft((prev) => (prev > 0 ? prev - 1 : 0));
+      }, 1000);
+    },
+    [clearTimer]
+  );
+
+  useEffect(() => {
+    startTimer(initialSeconds);
+    return clearTimer;
+  }, [clearTimer, initialSeconds, startTimer]);
+
+  const reset = useCallback(
+    (nextSeconds = initialSeconds) => {
+      startTimer(nextSeconds);
+    },
+    [initialSeconds, startTimer]
+  );
 
   return {
     secondsLeft,
     formatted: formatCountdown(secondsLeft),
     canResend: secondsLeft === 0,
+    isExpired: secondsLeft === 0,
     reset,
   };
 }

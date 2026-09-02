@@ -1,21 +1,143 @@
-import React from 'react';
-import { NavigationContainer } from '@react-navigation/native';
+import React, { useEffect } from 'react';
+import {
+  ActivityIndicator,
+  View,
+  StyleSheet,
+} from 'react-native';
+import {
+  NavigationContainer,
+  createNavigationContainerRef,
+} from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { useAuth } from '../contexts/AuthContext';
 import MainTabNavigator from './MainTabNavigator';
+import SplashScreen from '../screens/auth/SplashScreen';
 import SignInScreen from '../screens/auth/SignInScreen';
 import CreateAccountScreen from '../screens/auth/CreateAccountScreen';
 import VerifyMobileNumberScreen from '../screens/auth/VerifyMobileNumberScreen';
 import { RootStackParamList } from './types';
+import { colors } from '../theme/colors';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+export const navigationRef = createNavigationContainerRef<RootStackParamList>();
+
+function LoadingScreen() {
+  return (
+    <View style={styles.loading}>
+      <ActivityIndicator size="large" color={colors.primary} />
+    </View>
+  );
+}
+
+function AuthNavigationHandler() {
+  const { session, isLoading, mobileVerified, isVerificationLoading } =
+    useAuth();
+
+  useEffect(() => {
+    if (isLoading || !navigationRef.isReady()) {
+      return;
+    }
+
+    const currentRoute = navigationRef.getCurrentRoute()?.name;
+    const currentParams = navigationRef.getCurrentRoute()?.params as
+      | RootStackParamList['VerifyMobileNumber']
+      | undefined;
+
+    const authRoutes = new Set([
+      'Splash',
+      'SignIn',
+      'CreateAccount',
+      'VerifyMobileNumber',
+    ]);
+
+    if (currentRoute === 'Splash') {
+      return;
+    }
+
+    if (!session) {
+      if (currentRoute === 'VerifyMobileNumber' && currentParams?.mode === 'recovery') {
+        return;
+      }
+
+      if (!currentRoute || !authRoutes.has(currentRoute)) {
+        navigationRef.reset({
+          index: 0,
+          routes: [{ name: 'SignIn' }],
+        });
+      }
+      return;
+    }
+
+    if (isVerificationLoading) {
+      return;
+    }
+
+    if (currentRoute === 'VerifyMobileNumber' && currentParams?.mode === 'recovery') {
+      return;
+    }
+
+    if (mobileVerified === false) {
+      if (currentRoute !== 'VerifyMobileNumber') {
+        navigationRef.reset({
+          index: 0,
+          routes: [
+            {
+              name: 'VerifyMobileNumber',
+              params: { mode: 'registration' },
+            },
+          ],
+        });
+      }
+      return;
+    }
+
+    if (mobileVerified === true) {
+      if (currentRoute && authRoutes.has(currentRoute)) {
+        navigationRef.reset({
+          index: 0,
+          routes: [{ name: 'MainTabs' }],
+        });
+      }
+      return;
+    }
+
+    if (
+      currentRoute &&
+      authRoutes.has(currentRoute) &&
+      currentRoute !== 'VerifyMobileNumber' &&
+      currentRoute !== 'CreateAccount'
+    ) {
+      navigationRef.reset({
+        index: 0,
+        routes: [
+          {
+            name: 'VerifyMobileNumber',
+            params: { mode: 'registration' },
+          },
+        ],
+      });
+    }
+  }, [session, isLoading, mobileVerified, isVerificationLoading]);
+
+  return null;
+}
 
 export default function RootNavigator() {
+  const { isLoading } = useAuth();
+
+  if (isLoading) {
+    return <LoadingScreen />;
+  }
+
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
+      <AuthNavigationHandler />
       <Stack.Navigator
-        initialRouteName="SignIn"
+        initialRouteName="Splash"
         screenOptions={{ headerShown: false }}
       >
+        <Stack.Screen name="Splash" component={SplashScreen} />
+        <Stack.Screen name="MainTabs" component={MainTabNavigator} />
         <Stack.Screen name="SignIn" component={SignInScreen} />
         <Stack.Screen
           name="CreateAccount"
@@ -25,10 +147,21 @@ export default function RootNavigator() {
         <Stack.Screen
           name="VerifyMobileNumber"
           component={VerifyMobileNumberScreen}
-          options={{ animation: 'slide_from_right' }}
+          options={{
+            animation: 'slide_from_right',
+            gestureEnabled: false,
+          }}
         />
-        <Stack.Screen name="MainTabs" component={MainTabNavigator} />
       </Stack.Navigator>
     </NavigationContainer>
   );
 }
+
+const styles = StyleSheet.create({
+  loading: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.background,
+  },
+});

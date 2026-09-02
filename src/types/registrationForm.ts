@@ -1,3 +1,5 @@
+import { BankAccountType } from './bankAccount';
+
 export type DocumentUploadValue = {
   uri: string | null;
   fileName: string;
@@ -23,10 +25,13 @@ export type RegistrationFormValues = {
   confirmAccountNumber: string;
   ifscCode: string;
   bankName: string;
+  accountType: BankAccountType;
   nomineeName: string;
   relationship: string;
   nomineeAadhaar: string;
   nomineePercentage: string;
+  password: string;
+  confirmPassword: string;
   authorized: boolean;
 };
 

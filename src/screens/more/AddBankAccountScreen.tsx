@@ -8,16 +8,16 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import BankFormField from '../../components/bank/BankFormField';
 import AccountTypeSelector from '../../components/bank/AccountTypeSelector';
 import FormCheckbox from '../../components/form/FormCheckbox';
-import {
-  ADD_BANK_ACCOUNT_DEFAULTS,
-  isValidIfscFormat,
-} from '../../data/bankAccountForm';
+import { useAuth } from '../../contexts/AuthContext';
+import { ADD_BANK_ACCOUNT_DEFAULTS } from '../../data/bankAccountForm';
+import { createBankAccount } from '../../services/bankAccountService';
 import { MoreStackScreenProps } from '../../navigation/types';
 import { AddBankAccountFormErrors } from '../../types/bankAccountForm';
 import { BankAccountType } from '../../types/bankAccount';
@@ -31,6 +31,7 @@ type Props = MoreStackScreenProps<'AddBankAccount'>;
 
 export default function AddBankAccountScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
+  const { session } = useAuth();
   const [accountHolderName, setAccountHolderName] = useState(
     ADD_BANK_ACCOUNT_DEFAULTS.accountHolderName
   );
@@ -49,6 +50,7 @@ export default function AddBankAccountScreen({ navigation }: Props) {
   );
   const [errors, setErrors] = useState<AddBankAccountFormErrors>({});
   const [submitted, setSubmitted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const goBack = () => {
     navigation.goBack();
@@ -64,7 +66,13 @@ export default function AddBankAccountScreen({ navigation }: Props) {
     }
   };
 
-  const handleVerifyAndAdd = () => {
+  const handleVerifyAndAdd = async () => {
+    const userId = session?.user?.id;
+    if (!userId) {
+      Alert.alert('Sign in required', 'Please sign in to add a bank account.');
+      return;
+    }
+
     setSubmitted(true);
     const nextErrors = validateAddBankAccountForm({
       accountHolderName,
@@ -80,14 +88,26 @@ export default function AddBankAccountScreen({ navigation }: Props) {
       return;
     }
 
-    // Local validation only — backend verification comes later
-    Alert.alert(
-      'Form validated',
-      'Bank account details look valid locally. Backend verification and account linking will be added in a later stage.'
-    );
-  };
+    setIsSubmitting(true);
 
-  const ifscLooksValid = isValidIfscFormat(ifscCode);
+    try {
+      await createBankAccount(userId, {
+        accountHolderName,
+        accountNumber,
+        ifscCode,
+        accountType,
+      });
+      navigation.navigate('MyBankAccounts');
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Failed to add bank account. Please try again.';
+      Alert.alert('Unable to add account', message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <View style={[styles.safe, { paddingTop: insets.top }]}>
@@ -183,8 +203,6 @@ export default function AddBankAccountScreen({ navigation }: Props) {
             error={errors.ifscCode}
             autoCapitalize="characters"
             autoCorrect={false}
-            showValidIcon
-            isValid={ifscLooksValid && !errors.ifscCode}
             returnKeyType="done"
           />
 
@@ -209,15 +227,21 @@ export default function AddBankAccountScreen({ navigation }: Props) {
               style={styles.cancelBtn}
               activeOpacity={0.8}
               onPress={goBack}
+              disabled={isSubmitting}
             >
               <Text style={styles.cancelText}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={styles.submitBtn}
+              style={[styles.submitBtn, isSubmitting && styles.submitBtnDisabled]}
               activeOpacity={0.85}
               onPress={handleVerifyAndAdd}
+              disabled={isSubmitting}
             >
-              <Text style={styles.submitText}>Verify & Add</Text>
+              {isSubmitting ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.submitText}>Verify & Add</Text>
+              )}
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -328,6 +352,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  submitBtnDisabled: {
+    opacity: 0.7,
   },
   submitText: {
     fontSize: 15,

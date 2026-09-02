@@ -7,3 +7,6 @@ npm-debug.*
 .DS_Store
 *.pem
 web-build/
+.env
+.env.local
+.expo-test-bundle/

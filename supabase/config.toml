@@ -1,0 +1,2 @@
+[functions.otp]
+verify_jwt = false

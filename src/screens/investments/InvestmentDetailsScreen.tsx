@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -6,11 +6,17 @@ import {
   ScrollView,
   TouchableOpacity,
   Image,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import DetailMetricCard from '../../components/DetailMetricCard';
+import { useAuth } from '../../contexts/AuthContext';
 import { getInvestmentById } from '../../data/investments';
+import { getInvestmentByIdForUser } from '../../services/investmentService';
+import { isMissingTableError } from '../../utils/supabaseErrors';
+import { Investment } from '../../types/investment';
 import { AddFundsStackScreenProps } from '../../navigation/types';
 import { colors, spacing } from '../../theme/colors';
 
@@ -20,9 +26,54 @@ type Props = AddFundsStackScreenProps<'InvestmentDetails'>;
 
 export default function InvestmentDetailsScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
-  const investment = useMemo(
-    () => getInvestmentById(route.params.investmentId),
-    [route.params.investmentId]
+  const { session } = useAuth();
+  const [investment, setInvestment] = useState<Investment | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const loadInvestment = useCallback(async () => {
+    const investmentId = route.params.investmentId;
+    const userId = session?.user?.id;
+
+    setIsLoading(true);
+    setLoadError(null);
+
+    try {
+      if (userId) {
+        const fromDb = await getInvestmentByIdForUser(userId, investmentId);
+        if (fromDb) {
+          setInvestment(fromDb);
+          return;
+        }
+      }
+
+      const dummy = getInvestmentById(investmentId);
+      setInvestment(dummy ?? null);
+      if (!dummy) {
+        setLoadError('Investment not found.');
+      }
+    } catch (error) {
+      if (isMissingTableError(error)) {
+        const dummy = getInvestmentById(investmentId);
+        setInvestment(dummy ?? null);
+        return;
+      }
+      const message =
+        error instanceof Error ? error.message : 'Failed to load investment.';
+      setLoadError(message);
+      const dummy = getInvestmentById(investmentId);
+      if (dummy) {
+        setInvestment(dummy);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, [route.params.investmentId, session?.user?.id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadInvestment();
+    }, [loadInvestment])
   );
 
   const goBack = () => {
@@ -74,6 +125,14 @@ export default function InvestmentDetailsScreen({ navigation, route }: Props) {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
+        {isLoading ? (
+          <View style={styles.loadingWrap}>
+            <ActivityIndicator size="small" color={colors.primarySoft} />
+          </View>
+        ) : null}
+
+        {loadError ? <Text style={styles.errorText}>{loadError}</Text> : null}
+
         <View style={styles.grid}>
           <DetailMetricCard
             label="PRINCIPAL"
@@ -184,6 +243,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.screen,
     paddingTop: 16,
     paddingBottom: 24,
+  },
+  loadingWrap: {
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  errorText: {
+    fontSize: 13,
+    color: colors.danger,
+    marginBottom: 12,
   },
   grid: {
     flexDirection: 'row',

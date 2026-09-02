@@ -43,12 +43,18 @@ export const REGISTRATION_FORM_DEFAULTS: RegistrationFormValues = {
   confirmAccountNumber: '',
   ifscCode: '',
   bankName: '',
+  accountType: 'Savings',
   nomineeName: '',
   relationship: '',
   nomineeAadhaar: '',
   nomineePercentage: '',
-  authorized: true,
+  password: '',
+  confirmPassword: '',
+  authorized: false,
 };
+
+export const REGISTRATION_PASSWORD_HINT =
+  'Must be at least 8 characters with 1 uppercase, 1 number & 1 special character';
 
 export const REGISTRATION_AUTHORIZATION_TEXT =
   'I agree to the Terms & Conditions and authorize Roxru Financial to conduct secure digital KYC verification of my submitted identity documents.';

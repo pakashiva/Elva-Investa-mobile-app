@@ -3,6 +3,8 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { CompositeScreenProps } from '@react-navigation/native';
 
+import { VerifyMobileNumberParams } from '../types/otp';
+
 export type AddFundsStackParamList = {
   MyInvestments: undefined;
   NewFundRequest: undefined;
@@ -33,9 +35,10 @@ export type MainTabParamList = {
 };
 
 export type RootStackParamList = {
+  Splash: undefined;
   SignIn: undefined;
   CreateAccount: undefined;
-  VerifyMobileNumber: undefined;
+  VerifyMobileNumber: VerifyMobileNumberParams;
   MainTabs: NavigatorScreenParams<MainTabParamList>;
 };
 

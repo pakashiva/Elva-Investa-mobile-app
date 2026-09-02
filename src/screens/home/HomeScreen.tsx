@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -7,11 +7,29 @@ import {
   TouchableOpacity,
   Image,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, Feather } from '@expo/vector-icons';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import PerformanceChart from '../../components/PerformanceChart';
+import { useAuth } from '../../contexts/AuthContext';
+import { getProfileFullName } from '../../services/profileService';
+import {
+  EMPTY_HOME_SUMMARY,
+  getHomeSummary,
+  HomeSummary,
+} from '../../services/homeService';
+import { formatInr } from '../../utils/currency';
+import {
+  formatGainFooter,
+  formatInvestmentCountFooter,
+  formatPaidWithdrawalFooter,
+} from '../../utils/homeFormat';
+import { isMissingTableError } from '../../utils/supabaseErrors';
+import { MainTabParamList } from '../../navigation/types';
 import { colors, spacing } from '../../theme/colors';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -20,12 +38,12 @@ const CARD_GAP = 12;
 const CARD_WIDTH = (SCREEN_WIDTH - H_PAD * 2 - CARD_GAP) / 2;
 const avatarSource = require('../../../assets/avatar.png');
 
-const SUMMARY_CARDS = [
+type HomeNav = BottomTabNavigationProp<MainTabParamList, 'Home'>;
+
+const SUMMARY_CARD_CONFIG = [
   {
     id: 'invested',
     label: 'Total Invested',
-    value: '₹10,00,000',
-    footer: 'across 5 investments',
     footerColor: colors.textSecondary,
     iconBg: '#EDE7FF',
     icon: 'wallet-outline' as const,
@@ -35,8 +53,6 @@ const SUMMARY_CARDS = [
   {
     id: 'returns',
     label: 'Current Returns',
-    value: '₹2,35,750',
-    footer: '+23.57% total gain',
     footerColor: colors.success,
     iconBg: colors.successBg,
     icon: 'trending-up' as const,
@@ -46,8 +62,6 @@ const SUMMARY_CARDS = [
   {
     id: 'maturity',
     label: 'Maturity Value',
-    value: '₹12,35,750',
-    footer: 'projected yield',
     footerColor: colors.textSecondary,
     iconBg: '#E8F0FF',
     icon: 'flag-outline' as const,
@@ -57,15 +71,13 @@ const SUMMARY_CARDS = [
   {
     id: 'withdrawn',
     label: 'Total Withdrawn',
-    value: '₹0',
-    footer: 'No active withdrawals',
     footerColor: colors.textSecondary,
     iconBg: '#EEF0F3',
     icon: 'arrow-up-circle-outline' as const,
     iconLib: 'ion' as const,
     iconColor: '#9AA3B2',
   },
-];
+] as const;
 
 function CardIcon({
   iconLib,
@@ -82,9 +94,123 @@ function CardIcon({
   return <Ionicons name={icon as 'wallet-outline'} size={18} color={iconColor} />;
 }
 
+function buildSummaryCards(summary: HomeSummary, isLoading: boolean) {
+  const loadingValue = '—';
+
+  return SUMMARY_CARD_CONFIG.map((card) => {
+    switch (card.id) {
+      case 'invested':
+        return {
+          ...card,
+          value: isLoading ? loadingValue : formatInr(summary.totalInvested),
+          footer: isLoading
+            ? 'Loading...'
+            : formatInvestmentCountFooter(summary.activeInvestmentCount),
+        };
+      case 'returns':
+        return {
+          ...card,
+          value: isLoading ? loadingValue : formatInr(summary.currentTotalReturns),
+          footer: isLoading
+            ? 'Loading...'
+            : formatGainFooter(summary.totalGainPercent),
+        };
+      case 'maturity':
+        return {
+          ...card,
+          value: isLoading ? loadingValue : formatInr(summary.maturityValue),
+          footer: 'projected yield',
+        };
+      case 'withdrawn':
+        return {
+          ...card,
+          value: isLoading ? loadingValue : formatInr(summary.totalWithdrawals),
+          footer: isLoading
+            ? 'Loading...'
+            : formatPaidWithdrawalFooter(summary.paidWithdrawalCount),
+        };
+    }
+  });
+}
+
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<HomeNav>();
+  const { session } = useAuth();
   const [range, setRange] = useState<'1Y' | 'ALL'>('1Y');
+  const [displayName, setDisplayName] = useState('there');
+  const [summary, setSummary] = useState<HomeSummary>(EMPTY_HOME_SUMMARY);
+  const [isSummaryLoading, setIsSummaryLoading] = useState(true);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    const userId = session?.user?.id;
+
+    if (!userId) {
+      setDisplayName('there');
+      return () => {
+        mounted = false;
+      };
+    }
+
+    getProfileFullName(userId)
+      .then((name) => {
+        if (mounted && name) {
+          setDisplayName(name);
+        }
+      })
+      .catch((error) => {
+        console.warn('Failed to load profile name:', error.message);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [session?.user?.id]);
+
+  const loadHomeSummary = useCallback(async () => {
+    const userId = session?.user?.id;
+    if (!userId) {
+      setSummary(EMPTY_HOME_SUMMARY);
+      setIsSummaryLoading(false);
+      return;
+    }
+
+    setIsSummaryLoading(true);
+    setSummaryError(null);
+
+    try {
+      const data = await getHomeSummary(userId);
+      setSummary(data);
+    } catch (error) {
+      if (isMissingTableError(error)) {
+        setSummary(EMPTY_HOME_SUMMARY);
+        return;
+      }
+      const message =
+        error instanceof Error ? error.message : 'Failed to load home summary.';
+      console.warn('Home summary load error:', message);
+      setSummaryError(message);
+    } finally {
+      setIsSummaryLoading(false);
+    }
+  }, [session?.user?.id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadHomeSummary();
+    }, [loadHomeSummary])
+  );
+
+  const summaryCards = useMemo(
+    () => buildSummaryCards(summary, isSummaryLoading),
+    [summary, isSummaryLoading]
+  );
+
+  const handleInvestNow = () => {
+    navigation.navigate('AddFunds', { screen: 'NewFundRequest' });
+  };
 
   return (
     <View style={[styles.safe, { paddingTop: insets.top }]}>
@@ -96,7 +222,7 @@ export default function HomeScreen() {
         <View style={styles.header}>
           <View style={styles.headerTextWrap}>
             <Text style={styles.greeting}>
-              Hi, Venkatesh! <Text style={styles.wave}>👋</Text>
+              Hi, {displayName}! <Text style={styles.wave}>👋</Text>
             </Text>
             <Text style={styles.subtitle}>
               Here's what's happening with your investments
@@ -118,8 +244,12 @@ export default function HomeScreen() {
           </View>
         </View>
 
+        {summaryError ? (
+          <Text style={styles.errorText}>{summaryError}</Text>
+        ) : null}
+
         <View style={styles.summaryGrid}>
-          {SUMMARY_CARDS.map((card) => (
+          {summaryCards.map((card) => (
             <View key={card.id} style={styles.summaryCard}>
               <View style={styles.summaryCardTop}>
                 <View
@@ -135,7 +265,15 @@ export default function HomeScreen() {
                   {card.label}
                 </Text>
               </View>
-              <Text style={styles.summaryValue}>{card.value}</Text>
+              {isSummaryLoading ? (
+                <ActivityIndicator
+                  size="small"
+                  color={colors.primarySoft}
+                  style={styles.summaryLoader}
+                />
+              ) : (
+                <Text style={styles.summaryValue}>{card.value}</Text>
+              )}
               <Text style={[styles.summaryFooter, { color: card.footerColor }]}>
                 {card.footer}
               </Text>
@@ -203,7 +341,11 @@ export default function HomeScreen() {
               Discover bespoke investment solutions customized for your growth.
             </Text>
           </View>
-          <TouchableOpacity style={styles.investBtn} activeOpacity={0.85}>
+          <TouchableOpacity
+            style={styles.investBtn}
+            activeOpacity={0.85}
+            onPress={handleInvestNow}
+          >
             <Text style={styles.investBtnText}>Invest Now</Text>
           </TouchableOpacity>
         </LinearGradient>
@@ -290,6 +432,11 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     backgroundColor: '#D0D5DD',
   },
+  errorText: {
+    fontSize: 13,
+    color: colors.danger,
+    marginBottom: 10,
+  },
   summaryGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -328,6 +475,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textSecondary,
     fontWeight: '500',
+  },
+  summaryLoader: {
+    alignSelf: 'flex-start',
+    marginBottom: 4,
   },
   summaryValue: {
     fontSize: 20,

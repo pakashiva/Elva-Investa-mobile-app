@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,24 +17,103 @@ import FormSelectField from '../../components/form/FormSelectField';
 import HistoryRequestTabs from '../../components/withdrawals/HistoryRequestTabs';
 import WithdrawalStrategyCards from '../../components/withdrawals/WithdrawalStrategyCards';
 import RequestTimelineBar from '../../components/withdrawals/RequestTimelineBar';
+import { useAuth } from '../../contexts/AuthContext';
 import {
-  WITHDRAWAL_FUND_OPTIONS,
-  WITHDRAWAL_BANK_OPTIONS,
-  WITHDRAWAL_REQUESTED_DATE,
-  WithdrawalStrategy,
-} from '../../data/withdrawalRequest';
+  getUserBankAccounts,
+  verifyBankAccountOwnership,
+} from '../../services/bankAccountService';
+import {
+  getActiveInvestmentForUser,
+  getActiveInvestmentsForWithdrawal,
+} from '../../services/investmentService';
+import {
+  createWithdrawalRequest,
+  getRequestedDateLabel,
+} from '../../services/withdrawalService';
 import { WithdrawalsStackScreenProps } from '../../navigation/types';
+import { formatInrPlain } from '../../utils/currency';
+import {
+  isMissingTableError,
+  MISSING_INVESTMENTS_TABLE_MESSAGE,
+} from '../../utils/supabaseErrors';
 import { colors, spacing } from '../../theme/colors';
 
 type Props = WithdrawalsStackScreenProps<'CreateWithdrawalRequest'>;
 
 export default function CreateWithdrawalRequestScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
+  const { session } = useAuth();
   const [fundId, setFundId] = useState<string | null>(null);
   const [bankId, setBankId] = useState<string | null>(null);
-  const [strategy, setStrategy] = useState<WithdrawalStrategy>('full');
-  const [amount, setAmount] = useState('');
-  const [agreed, setAgreed] = useState(true);
+  const [strategy] = useState<'full'>('full');
+  const [agreed, setAgreed] = useState(false);
+  const [fundOptions, setFundOptions] = useState<
+    { id: string; label: string; withdrawalAmount: number }[]
+  >([]);
+  const [bankOptions, setBankOptions] = useState<{ id: string; label: string }[]>(
+    []
+  );
+  const [isLoadingOptions, setIsLoadingOptions] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const requestedDate = useMemo(() => getRequestedDateLabel(), []);
+
+  const selectedFund = useMemo(
+    () => fundOptions.find((fund) => fund.id === fundId) ?? null,
+    [fundId, fundOptions]
+  );
+
+  const withdrawalAmountDisplay = selectedFund
+    ? formatInrPlain(selectedFund.withdrawalAmount)
+    : '';
+
+  const loadFormOptions = useCallback(async () => {
+    const userId = session?.user?.id;
+    if (!userId) {
+      setFundOptions([]);
+      setBankOptions([]);
+      setIsLoadingOptions(false);
+      return;
+    }
+
+    setIsLoadingOptions(true);
+
+    try {
+      const banks = await getUserBankAccounts(userId);
+      setBankOptions(
+        banks.map((bank) => ({
+          id: bank.id,
+          label: bank.label,
+        }))
+      );
+
+      try {
+        const funds = await getActiveInvestmentsForWithdrawal(userId);
+        setFundOptions(
+          funds.map((fund) => ({
+            id: fund.id,
+            label: fund.label,
+            withdrawalAmount: fund.withdrawalAmount,
+          }))
+        );
+      } catch (fundError) {
+        if (!isMissingTableError(fundError)) {
+          throw fundError;
+        }
+        setFundOptions([]);
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Failed to load withdrawal form.';
+      Alert.alert('Unable to load form', message);
+    } finally {
+      setIsLoadingOptions(false);
+    }
+  }, [session?.user?.id]);
+
+  useEffect(() => {
+    loadFormOptions();
+  }, [loadFormOptions]);
 
   const goToHistory = () => {
     if (navigation.canGoBack()) {
@@ -43,20 +123,83 @@ export default function CreateWithdrawalRequestScreen({ navigation }: Props) {
     }
   };
 
-  const handleAmountChange = (text: string) => {
-    const cleaned = text.replace(/[^0-9.]/g, '');
-    const parts = cleaned.split('.');
-    const normalized =
-      parts.length > 2 ? `${parts[0]}.${parts.slice(1).join('')}` : cleaned;
-    setAmount(normalized);
-  };
+  const handleSubmitReview = async () => {
+    const userId = session?.user?.id;
+    if (!userId) {
+      Alert.alert('Sign in required', 'Please sign in to submit a withdrawal request.');
+      return;
+    }
 
-  const handleSubmitReview = () => {
-    // UI structure only — backend submission comes in a later stage
-    Alert.alert(
-      'Review ready',
-      'Withdrawal request captured locally. Submission will be connected in the next stage.'
-    );
+    if (!agreed) {
+      Alert.alert(
+        'Terms required',
+        'You must agree to the Terms and Conditions before submitting.'
+      );
+      return;
+    }
+
+    if (!fundId) {
+      Alert.alert('Fund required', 'Please select an active investment.');
+      return;
+    }
+
+    if (!bankId) {
+      Alert.alert('Bank account required', 'Please select a payout bank account.');
+      return;
+    }
+
+    if (fundOptions.length === 0) {
+      Alert.alert(
+        'No active investments',
+        'You need an active investment before creating a withdrawal request.'
+      );
+      return;
+    }
+
+    if (bankOptions.length === 0) {
+      Alert.alert(
+        'No bank accounts',
+        'Add a bank account before submitting a withdrawal request.'
+      );
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const activeInvestment = await getActiveInvestmentForUser(userId, fundId);
+      if (!activeInvestment) {
+        Alert.alert(
+          'Invalid investment',
+          'Please select a valid active investment.'
+        );
+        return;
+      }
+
+      const ownsBank = await verifyBankAccountOwnership(userId, bankId);
+      if (!ownsBank) {
+        Alert.alert('Invalid bank account', 'Please select a valid bank account.');
+        return;
+      }
+
+      await createWithdrawalRequest({
+        userId,
+        investmentId: activeInvestment.id,
+        bankAccountId: bankId,
+        withdrawalAmount: activeInvestment.withdrawalAmount,
+      });
+
+      navigation.navigate('WithdrawalsList');
+    } catch (error) {
+      const message = isMissingTableError(error)
+        ? MISSING_INVESTMENTS_TABLE_MESSAGE
+        : error instanceof Error
+          ? error.message
+          : 'Failed to submit withdrawal request. Please try again.';
+      Alert.alert('Submission failed', message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -92,42 +235,57 @@ export default function CreateWithdrawalRequestScreen({ navigation }: Props) {
             }}
           />
 
+          {isLoadingOptions ? (
+            <View style={styles.loadingWrap}>
+              <ActivityIndicator size="small" color={colors.primary} />
+            </View>
+          ) : null}
+
           <FormSelectField
             label="Select Fund"
             mutedLabel
-            placeholder="Select Account..."
+            placeholder={
+              fundOptions.length === 0
+                ? 'No active investments found'
+                : 'Select Account...'
+            }
             value={fundId}
-            options={WITHDRAWAL_FUND_OPTIONS}
+            options={fundOptions}
             onChange={setFundId}
           />
 
           <FormSelectField
             label="Payout Bank Account"
             mutedLabel
-            placeholder="Select Bank..."
+            placeholder={
+              bankOptions.length === 0 ? 'No bank accounts found' : 'Select Bank...'
+            }
             value={bankId}
-            options={WITHDRAWAL_BANK_OPTIONS}
+            options={bankOptions}
             onChange={setBankId}
           />
 
-          <WithdrawalStrategyCards value={strategy} onChange={setStrategy} />
+          <WithdrawalStrategyCards
+            value={strategy}
+            onChange={() => {}}
+            disablePartial
+          />
 
           <View style={styles.amountWrap}>
             <Text style={styles.fieldLabel}>Withdrawal Amount</Text>
-            <View style={styles.amountField}>
+            <View style={[styles.amountField, styles.amountFieldDisabled]}>
               <Text style={styles.currency}>₹</Text>
               <TextInput
-                style={styles.amountInput}
-                value={amount}
-                onChangeText={handleAmountChange}
-                keyboardType="decimal-pad"
+                style={[styles.amountInput, styles.amountInputDisabled]}
+                value={withdrawalAmountDisplay}
+                editable={false}
                 placeholder="0.00"
                 placeholderTextColor={colors.textMuted}
               />
             </View>
           </View>
 
-          <RequestTimelineBar requestedDate={WITHDRAWAL_REQUESTED_DATE} />
+          <RequestTimelineBar requestedDate={requestedDate} />
 
           <TouchableOpacity
             style={styles.termsBox}
@@ -148,11 +306,16 @@ export default function CreateWithdrawalRequestScreen({ navigation }: Props) {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.submitBtn}
+            style={[styles.submitBtn, isSubmitting && styles.submitBtnDisabled]}
             activeOpacity={0.85}
             onPress={handleSubmitReview}
+            disabled={isSubmitting}
           >
-            <Text style={styles.submitText}>Submit Review</Text>
+            {isSubmitting ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Text style={styles.submitText}>Submit Review</Text>
+            )}
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -196,6 +359,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.screen,
     paddingBottom: 28,
   },
+  loadingWrap: {
+    alignItems: 'center',
+    marginBottom: 12,
+  },
   fieldLabel: {
     fontSize: 14,
     fontWeight: '500',
@@ -215,6 +382,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 14,
   },
+  amountFieldDisabled: {
+    opacity: 0.85,
+  },
   currency: {
     fontSize: 22,
     fontWeight: '700',
@@ -227,6 +397,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.textPrimary,
     paddingVertical: 0,
+  },
+  amountInputDisabled: {
+    color: colors.textSecondary,
   },
   termsBox: {
     flexDirection: 'row',
@@ -270,6 +443,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  submitBtnDisabled: {
+    opacity: 0.7,
   },
   submitText: {
     fontSize: 16,

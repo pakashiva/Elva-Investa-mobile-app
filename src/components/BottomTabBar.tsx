@@ -40,7 +40,16 @@ export default function BottomTabBar({
                 target: state.routes[index].key,
                 canPreventDefault: true,
               });
-              if (!isFocused && !event.defaultPrevented) {
+              if (event.defaultPrevented) {
+                return;
+              }
+
+              if (tab.key === 'AddFunds') {
+                navigation.navigate('AddFunds', { screen: 'MyInvestments' });
+                return;
+              }
+
+              if (!isFocused) {
                 navigation.navigate(tab.key);
               }
             }}

@@ -24,15 +24,15 @@ export function validateRegistrationForm(
   if (isEmpty(values.aadhaarNumber)) {
     errors.aadhaarNumber = 'Aadhaar card number is required';
   }
-  if (!values.aadhaarFront.uri && !values.aadhaarFront.fileName) {
-    errors.aadhaarFront = 'Aadhaar front image is required';
+  if (!values.aadhaarFront.isUserSelected || !values.aadhaarFront.uri) {
+    errors.aadhaarFront = 'Please upload your Aadhaar front image';
   }
-  if (!values.aadhaarBack.uri && !values.aadhaarBack.fileName) {
-    errors.aadhaarBack = 'Aadhaar back image is required';
+  if (!values.aadhaarBack.isUserSelected || !values.aadhaarBack.uri) {
+    errors.aadhaarBack = 'Please upload your Aadhaar back image';
   }
   if (isEmpty(values.panNumber)) errors.panNumber = 'PAN card number is required';
-  if (!values.panCard.uri && !values.panCard.fileName) {
-    errors.panCard = 'PAN card image is required';
+  if (!values.panCard.isUserSelected || !values.panCard.uri) {
+    errors.panCard = 'Please upload your PAN card image';
   }
 
   if (isEmpty(values.accountHolderName)) {
@@ -54,6 +54,18 @@ export function validateRegistrationForm(
   }
   if (isEmpty(values.nomineePercentage)) {
     errors.nomineePercentage = 'Nominee percentage is required';
+  }
+
+  if (isEmpty(values.password)) {
+    errors.password = 'Password is required';
+  } else if (values.password.length < 8) {
+    errors.password = 'Password must be at least 8 characters';
+  }
+
+  if (isEmpty(values.confirmPassword)) {
+    errors.confirmPassword = 'Please confirm your password';
+  } else if (values.password !== values.confirmPassword) {
+    errors.confirmPassword = 'Passwords do not match';
   }
 
   if (!values.authorized) {

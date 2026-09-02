@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -7,23 +7,115 @@ import {
   TouchableOpacity,
   Image,
   Switch,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { DUMMY_PROFILE } from '../../data/profile';
+import { useAuth } from '../../contexts/AuthContext';
+import { getHomeSummary } from '../../services/homeService';
+import { getUserProfileDetails } from '../../services/profileService';
+import { UserProfileDetails } from '../../types/profile';
+import { formatInr } from '../../utils/currency';
+import { formatPercent } from '../../utils/homeFormat';
+import {
+  formatDisplayValue,
+  formatLastSignIn,
+  getProfileInitials,
+} from '../../utils/profileFormat';
+import { isMissingTableError } from '../../utils/supabaseErrors';
 import { MoreStackScreenProps } from '../../navigation/types';
 import { colors, spacing } from '../../theme/colors';
 
 const avatarSource = require('../../../assets/avatar.png');
-const profile = DUMMY_PROFILE;
+
+const SECURITY_CAPTION = 'Verify log-in requests via OTP SMS';
+const RECENT_LOGIN_DEVICE = 'Mobile App';
 
 type Props = MoreStackScreenProps<'MyProfile'>;
 
+type PortfolioDisplay = {
+  totalInvested: string;
+  currentReturns: string;
+  cagrYield: string;
+};
+
+const EMPTY_PORTFOLIO: PortfolioDisplay = {
+  totalInvested: formatInr(0),
+  currentReturns: formatInr(0),
+  cagrYield: formatPercent(0),
+};
+
 export default function MyProfileScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
-  const [twoFactorOn, setTwoFactorOn] = useState(
-    profile.security.twoFactorEnabled
+  const { session } = useAuth();
+  const [profile, setProfile] = useState<UserProfileDetails | null>(null);
+  const [portfolio, setPortfolio] = useState<PortfolioDisplay>(EMPTY_PORTFOLIO);
+  const [recentLoginAt, setRecentLoginAt] = useState('—');
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [twoFactorOn, setTwoFactorOn] = useState(false);
+
+  const loadProfile = useCallback(async () => {
+    const userId = session?.user?.id;
+    if (!userId) {
+      setProfile(null);
+      setPortfolio(EMPTY_PORTFOLIO);
+      setRecentLoginAt('—');
+      setIsLoading(false);
+      setLoadError('Please sign in to view your profile.');
+      return;
+    }
+
+    setIsLoading(true);
+    setLoadError(null);
+    setRecentLoginAt(formatLastSignIn(session.user.last_sign_in_at));
+
+    try {
+      const [profileData, summary] = await Promise.all([
+        getUserProfileDetails(userId, session.user.email),
+        getHomeSummary(userId),
+      ]);
+
+      if (!profileData) {
+        setProfile(null);
+        setPortfolio(EMPTY_PORTFOLIO);
+        setLoadError('Profile not found. Please complete registration.');
+        return;
+      }
+
+      setProfile(profileData);
+      setPortfolio({
+        totalInvested: formatInr(summary.totalInvested),
+        currentReturns: formatInr(summary.currentTotalReturns),
+        cagrYield: formatPercent(summary.totalGainPercent),
+      });
+    } catch (error) {
+      if (isMissingTableError(error)) {
+        setProfile(null);
+        setPortfolio(EMPTY_PORTFOLIO);
+        setLoadError('Profile is unavailable right now.');
+        return;
+      }
+      const message =
+        error instanceof Error ? error.message : 'Failed to load profile.';
+      console.error('MyProfile load error:', message);
+      setProfile(null);
+      setPortfolio(EMPTY_PORTFOLIO);
+      setLoadError(message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [session?.user?.email, session?.user?.id, session?.user?.last_sign_in_at]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadProfile();
+    }, [loadProfile])
   );
+
+  const initials = profile ? getProfileInitials(profile.fullName) : '—';
+  const displayName = profile?.fullName ?? '—';
 
   return (
     <View style={[styles.safe, { paddingTop: insets.top }]}>
@@ -59,115 +151,131 @@ export default function MyProfileScreen({ navigation }: Props) {
         </View>
       </View>
 
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Profile summary */}
-        <View style={styles.card}>
-          <View style={styles.summaryRow}>
-            <View style={styles.initialsCircle}>
-              <Text style={styles.initials}>{profile.initials}</Text>
-            </View>
-            <View style={styles.summaryInfo}>
-              <View style={styles.nameRow}>
-                <Text style={styles.name}>{profile.name}</Text>
-                {profile.verified ? (
-                  <View style={styles.verifiedBadge}>
-                    <Text style={styles.verifiedText}>Verified</Text>
-                  </View>
-                ) : null}
+      {isLoading ? (
+        <View style={styles.loadingWrap}>
+          <ActivityIndicator size="small" color={colors.primary} />
+        </View>
+      ) : null}
+
+      {!isLoading && loadError ? (
+        <View style={styles.errorWrap}>
+          <Text style={styles.errorText}>{loadError}</Text>
+        </View>
+      ) : null}
+
+      {!isLoading && profile ? (
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Profile summary */}
+          <View style={styles.card}>
+            <View style={styles.summaryRow}>
+              <View style={styles.initialsCircle}>
+                <Text style={styles.initials}>{initials}</Text>
               </View>
-              <Text style={styles.customerId}>{profile.customerId}</Text>
+              <View style={styles.summaryInfo}>
+                <View style={styles.nameRow}>
+                  <Text style={styles.name}>{displayName}</Text>
+                  {profile.verified ? (
+                    <View style={styles.verifiedBadge}>
+                      <Text style={styles.verifiedText}>Verified</Text>
+                    </View>
+                  ) : null}
+                </View>
+                <Text style={styles.customerId}>—</Text>
+              </View>
             </View>
           </View>
-        </View>
 
-        {/* Portfolio Performance */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Portfolio Performance</Text>
-          <View style={styles.metricRow}>
-            <Text style={styles.metricLabel}>Total Invested</Text>
-            <Text style={[styles.metricValue, styles.valuePrimary]}>
-              {profile.portfolio.totalInvested}
-            </Text>
-          </View>
-          <View style={styles.metricRow}>
-            <Text style={styles.metricLabel}>Current Returns</Text>
-            <Text style={[styles.metricValue, styles.valueSuccess]}>
-              {profile.portfolio.currentReturns}
-            </Text>
-          </View>
-          <View style={[styles.metricRow, styles.metricRowLast]}>
-            <Text style={styles.metricLabel}>CAGR Yield</Text>
-            <Text style={[styles.metricValue, styles.valueYield]}>
-              {profile.portfolio.cagrYield}
-            </Text>
-          </View>
-        </View>
-
-        {/* Personal Information */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Personal Information</Text>
-          <View style={styles.infoBlock}>
-            <Text style={styles.infoLabel}>FULL NAME</Text>
-            <Text style={styles.infoValue}>{profile.personal.fullName}</Text>
-          </View>
-          <View style={styles.infoBlock}>
-            <Text style={styles.infoLabel}>PAN NUMBER</Text>
-            <Text style={styles.infoValue}>{profile.personal.panNumber}</Text>
-          </View>
-          <View style={[styles.infoBlock, styles.infoBlockLast]}>
-            <Text style={styles.infoLabel}>DATE OF BIRTH</Text>
-            <Text style={styles.infoValue}>{profile.personal.dateOfBirth}</Text>
-          </View>
-        </View>
-
-        {/* Contact Information */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Contact Information</Text>
-          <View style={styles.infoBlock}>
-            <Text style={styles.infoLabel}>EMAIL ADDRESS</Text>
-            <Text style={styles.infoValue}>{profile.contact.email}</Text>
-          </View>
-          <View style={[styles.infoBlock, styles.infoBlockLast]}>
-            <Text style={styles.infoLabel}>PHONE NUMBER</Text>
-            <Text style={styles.infoValue}>{profile.contact.phone}</Text>
-          </View>
-        </View>
-
-        {/* Security Settings */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Security Settings</Text>
-
-          <View style={styles.securityRow}>
-            <View style={styles.securityTextWrap}>
-              <Text style={styles.securityTitle}>Two-Factor Authentication</Text>
-              <Text style={styles.securityCaption}>
-                {profile.security.twoFactorCaption}
+          {/* Portfolio Performance */}
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Portfolio Performance</Text>
+            <View style={styles.metricRow}>
+              <Text style={styles.metricLabel}>Total Invested</Text>
+              <Text style={[styles.metricValue, styles.valuePrimary]}>
+                {portfolio.totalInvested}
               </Text>
             </View>
-            <Switch
-              value={twoFactorOn}
-              onValueChange={setTwoFactorOn}
-              trackColor={{ false: '#D0D5DD', true: colors.primarySoft }}
-              thumbColor="#FFFFFF"
-              ios_backgroundColor="#D0D5DD"
-            />
+            <View style={styles.metricRow}>
+              <Text style={styles.metricLabel}>Current Returns</Text>
+              <Text style={[styles.metricValue, styles.valueSuccess]}>
+                {portfolio.currentReturns}
+              </Text>
+            </View>
+            <View style={[styles.metricRow, styles.metricRowLast]}>
+              <Text style={styles.metricLabel}>CAGR Yield</Text>
+              <Text style={[styles.metricValue, styles.valueYield]}>
+                {portfolio.cagrYield}
+              </Text>
+            </View>
           </View>
 
-          <View style={styles.divider} />
-
-          <Text style={styles.securityTitle}>Recent Login History</Text>
-          <View style={styles.loginRow}>
-            <Text style={styles.loginDevice}>
-              {profile.security.recentLoginDevice}
-            </Text>
-            <Text style={styles.loginAt}>{profile.security.recentLoginAt}</Text>
+          {/* Personal Information */}
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Personal Information</Text>
+            <View style={styles.infoBlock}>
+              <Text style={styles.infoLabel}>FULL NAME</Text>
+              <Text style={styles.infoValue}>{profile.fullName}</Text>
+            </View>
+            <View style={styles.infoBlock}>
+              <Text style={styles.infoLabel}>PAN NUMBER</Text>
+              <Text style={styles.infoValue}>
+                {formatDisplayValue(profile.panNumber)}
+              </Text>
+            </View>
+            <View style={[styles.infoBlock, styles.infoBlockLast]}>
+              <Text style={styles.infoLabel}>DATE OF BIRTH</Text>
+              <Text style={styles.infoValue}>{profile.dateOfBirth}</Text>
+            </View>
           </View>
-        </View>
-      </ScrollView>
+
+          {/* Contact Information */}
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Contact Information</Text>
+            <View style={styles.infoBlock}>
+              <Text style={styles.infoLabel}>EMAIL ADDRESS</Text>
+              <Text style={styles.infoValue}>
+                {formatDisplayValue(profile.emailAddress)}
+              </Text>
+            </View>
+            <View style={[styles.infoBlock, styles.infoBlockLast]}>
+              <Text style={styles.infoLabel}>PHONE NUMBER</Text>
+              <Text style={styles.infoValue}>
+                {formatDisplayValue(profile.mobileNumber)}
+              </Text>
+            </View>
+          </View>
+
+          {/* Security Settings */}
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Security Settings</Text>
+
+            <View style={styles.securityRow}>
+              <View style={styles.securityTextWrap}>
+                <Text style={styles.securityTitle}>Two-Factor Authentication</Text>
+                <Text style={styles.securityCaption}>{SECURITY_CAPTION}</Text>
+              </View>
+              <Switch
+                value={twoFactorOn}
+                onValueChange={setTwoFactorOn}
+                trackColor={{ false: '#D0D5DD', true: colors.primarySoft }}
+                thumbColor="#FFFFFF"
+                ios_backgroundColor="#D0D5DD"
+              />
+            </View>
+
+            <View style={styles.divider} />
+
+            <Text style={styles.securityTitle}>Recent Login History</Text>
+            <View style={styles.loginRow}>
+              <Text style={styles.loginDevice}>{RECENT_LOGIN_DEVICE}</Text>
+              <Text style={styles.loginAt}>{recentLoginAt}</Text>
+            </View>
+          </View>
+        </ScrollView>
+      ) : null}
     </View>
   );
 }
@@ -247,6 +355,23 @@ const styles = StyleSheet.create({
     height: 38,
     borderRadius: 19,
     backgroundColor: '#D0D5DD',
+  },
+  loadingWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  errorWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.screen,
+  },
+  errorText: {
+    fontSize: 14,
+    color: colors.danger,
+    textAlign: 'center',
+    lineHeight: 20,
   },
   scroll: {
     flex: 1,

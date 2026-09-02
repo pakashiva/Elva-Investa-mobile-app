@@ -6,9 +6,14 @@ import { colors } from '../../theme/colors';
 type Props = {
   value: WithdrawalStrategy;
   onChange: (strategy: WithdrawalStrategy) => void;
+  disablePartial?: boolean;
 };
 
-export default function WithdrawalStrategyCards({ value, onChange }: Props) {
+export default function WithdrawalStrategyCards({
+  value,
+  onChange,
+  disablePartial = false,
+}: Props) {
   return (
     <View style={styles.wrap}>
       <Text style={styles.label}>Withdrawal Strategy</Text>
@@ -29,19 +34,33 @@ export default function WithdrawalStrategyCards({ value, onChange }: Props) {
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.card, value === 'partial' && styles.cardSelected]}
-          activeOpacity={0.85}
-          onPress={() => onChange('partial')}
+          style={[
+            styles.card,
+            value === 'partial' && styles.cardSelected,
+            disablePartial && styles.cardDisabled,
+          ]}
+          activeOpacity={disablePartial ? 1 : 0.85}
+          onPress={() => {
+            if (!disablePartial) {
+              onChange('partial');
+            }
+          }}
+          disabled={disablePartial}
         >
           <Text
             style={[
               styles.cardTitle,
               value === 'partial' && styles.cardTitleSelected,
+              disablePartial && styles.cardTitleDisabled,
             ]}
           >
             Partial Withdrawal
           </Text>
-          <Text style={styles.cardDesc}>Minimum ₹1L balance required.</Text>
+          <Text
+            style={[styles.cardDesc, disablePartial && styles.cardDescDisabled]}
+          >
+            Minimum ₹1L balance required.
+          </Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -89,5 +108,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16,
     color: colors.textSecondary,
+  },
+  cardDisabled: {
+    opacity: 0.45,
+    backgroundColor: '#F7F8FA',
+  },
+  cardTitleDisabled: {
+    color: colors.textSecondary,
+  },
+  cardDescDisabled: {
+    color: colors.textMuted,
   },
 });

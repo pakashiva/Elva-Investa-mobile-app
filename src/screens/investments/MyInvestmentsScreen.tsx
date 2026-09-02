@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -6,19 +6,23 @@ import {
   FlatList,
   TouchableOpacity,
   Image,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FilterChips from '../../components/FilterChips';
 import InvestmentCard from '../../components/InvestmentCard';
+import { useAuth } from '../../contexts/AuthContext';
 import {
   DUMMY_INVESTMENTS,
   INVESTMENT_FILTERS,
   filterInvestments,
 } from '../../data/investments';
-import { InvestmentFilter } from '../../types/investment';
+import { getUserInvestments } from '../../services/investmentService';
+import { isMissingTableError } from '../../utils/supabaseErrors';
+import { Investment, InvestmentFilter } from '../../types/investment';
 import { AddFundsStackParamList } from '../../navigation/types';
 import { colors, spacing } from '../../theme/colors';
 
@@ -32,12 +36,49 @@ type MyInvestmentsNav = NativeStackNavigationProp<
 export default function MyInvestmentsScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<MyInvestmentsNav>();
+  const { session } = useAuth();
   const [filter, setFilter] = useState<InvestmentFilter>('All');
+  const [userInvestments, setUserInvestments] = useState<Investment[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const investments = useMemo(
-    () => filterInvestments(DUMMY_INVESTMENTS, filter),
-    [filter]
+  const loadUserInvestments = useCallback(async () => {
+    const userId = session?.user?.id;
+    if (!userId) {
+      setUserInvestments([]);
+      return;
+    }
+
+    setIsLoading(true);
+    setLoadError(null);
+
+    try {
+      const investments = await getUserInvestments(userId);
+      setUserInvestments(investments);
+    } catch (error) {
+      if (isMissingTableError(error)) {
+        // Migration 003 not applied yet — keep showing dummy investments only.
+        setUserInvestments([]);
+        return;
+      }
+      const message =
+        error instanceof Error ? error.message : 'Failed to load investments.';
+      setLoadError(message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [session?.user?.id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadUserInvestments();
+    }, [loadUserInvestments])
   );
+
+  const investments = useMemo(() => {
+    const merged = [...userInvestments, ...DUMMY_INVESTMENTS];
+    return filterInvestments(merged, filter);
+  }, [filter, userInvestments]);
 
   return (
     <View style={[styles.safe, { paddingTop: insets.top }]}>
@@ -89,6 +130,16 @@ export default function MyInvestmentsScreen() {
                 onChange={setFilter}
               />
             </View>
+
+            {isLoading ? (
+              <View style={styles.loadingRow}>
+                <ActivityIndicator size="small" color={colors.primarySoft} />
+              </View>
+            ) : null}
+
+            {loadError ? (
+              <Text style={styles.errorText}>{loadError}</Text>
+            ) : null}
           </View>
         }
         renderItem={({ item }) => (
@@ -200,6 +251,15 @@ const styles = StyleSheet.create({
   },
   filters: {
     marginBottom: 14,
+  },
+  loadingRow: {
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  errorText: {
+    fontSize: 13,
+    color: colors.danger,
+    marginBottom: 8,
   },
   empty: {
     paddingVertical: 40,

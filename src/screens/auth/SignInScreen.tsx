@@ -7,12 +7,15 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import BrandLogo from '../../components/auth/BrandLogo';
 import SignInTextField from '../../components/auth/SignInTextField';
 import { SIGN_IN_DEFAULTS } from '../../data/auth';
+import { signInWithEmail } from '../../services/authService';
 import { RootStackScreenProps } from '../../navigation/types';
 import { authColors } from '../../theme/authColors';
 
@@ -24,13 +27,52 @@ export default function SignInScreen({ navigation }: Props) {
     SIGN_IN_DEFAULTS.mobileOrEmail
   );
   const [password, setPassword] = useState(SIGN_IN_DEFAULTS.password);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const handleSignIn = () => {
-    navigation.replace('MainTabs');
+  const handleSignIn = async () => {
+    if (!mobileOrEmail.trim() || !password) {
+      setErrorMessage('Please enter your email and password.');
+      return;
+    }
+
+    if (!mobileOrEmail.includes('@')) {
+      setErrorMessage('Please sign in using your registered email address.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    setErrorMessage(null);
+
+    try {
+      await signInWithEmail(mobileOrEmail, password);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Unable to sign in right now.';
+      setErrorMessage(message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleForgotPassword = () => {
-    navigation.navigate('VerifyMobileNumber');
+    const email = mobileOrEmail.trim().toLowerCase();
+
+    if (!email) {
+      setErrorMessage('Enter your registered email address first.');
+      return;
+    }
+
+    if (!email.includes('@')) {
+      setErrorMessage('Please enter your registered email address.');
+      return;
+    }
+
+    setErrorMessage(null);
+    navigation.navigate('VerifyMobileNumber', {
+      mode: 'recovery',
+      email,
+    });
   };
 
   return (
@@ -89,12 +131,19 @@ export default function SignInScreen({ navigation }: Props) {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.signInBtn}
+            style={[styles.signInBtn, isSubmitting && styles.signInBtnDisabled]}
             activeOpacity={0.85}
             onPress={handleSignIn}
+            disabled={isSubmitting}
           >
-            <Text style={styles.signInText}>Sign In</Text>
+            {isSubmitting ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.signInText}>Sign In</Text>
+            )}
           </TouchableOpacity>
+
+          {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
 
           <View style={styles.orRow}>
             <View style={styles.orLine} />
@@ -182,7 +231,17 @@ const styles = StyleSheet.create({
     backgroundColor: authColors.header,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 28,
+    marginBottom: 12,
+  },
+  signInBtnDisabled: {
+    opacity: 0.7,
+  },
+  errorText: {
+    marginBottom: 16,
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#FF3B30',
+    textAlign: 'center',
   },
   signInText: {
     fontSize: 16,

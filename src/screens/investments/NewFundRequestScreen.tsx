@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,19 +17,39 @@ import FormTextField from '../../components/form/FormTextField';
 import FormSelectField from '../../components/form/FormSelectField';
 import FormCheckbox from '../../components/form/FormCheckbox';
 import PayableInfoBanner from '../../components/form/PayableInfoBanner';
+import { useAuth } from '../../contexts/AuthContext';
 import {
-  DUMMY_BANK_ACCOUNTS,
-  DUMMY_NOMINEES,
+  FUND_AMOUNT_MINIMUM,
   getAutoSelectedPaydate,
   formatPayableBreakdown,
 } from '../../data/fundRequest';
+import {
+  getUserBankAccounts,
+  verifyBankAccountOwnership,
+} from '../../services/bankAccountService';
+import {
+  createFundRequest,
+  validateFundAmount,
+} from '../../services/investmentService';
+import {
+  getUserNominees,
+  verifyNomineeOwnership,
+} from '../../services/nomineeService';
+import { BankAccount, Nominee } from '../../types/fundRequest';
 import { AddFundsStackScreenProps } from '../../navigation/types';
+import { parseDisplayPaydate } from '../../utils/parsePaydate';
+import { parseInrInput } from '../../utils/currency';
+import {
+  isMissingTableError,
+  MISSING_INVESTMENTS_TABLE_MESSAGE,
+} from '../../utils/supabaseErrors';
 import { colors, spacing } from '../../theme/colors';
 
 type Props = AddFundsStackScreenProps<'NewFundRequest'>;
 
 export default function NewFundRequestScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
+  const { session } = useAuth();
   const autoPaydate = useMemo(() => getAutoSelectedPaydate(), []);
 
   const [fundAmount, setFundAmount] = useState('');
@@ -36,12 +57,48 @@ export default function NewFundRequestScreen({ navigation }: Props) {
   const [nomineeId, setNomineeId] = useState<string | null>(null);
   const [hasReferralCode, setHasReferralCode] = useState(false);
   const [referralCode, setReferralCode] = useState('');
-  const [agreedToTerms, setAgreedToTerms] = useState(true);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [nominees, setNominees] = useState<Nominee[]>([]);
+  const [isLoadingOptions, setIsLoadingOptions] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const payable = useMemo(
     () => formatPayableBreakdown(fundAmount),
     [fundAmount]
   );
+
+  const loadFormOptions = useCallback(async () => {
+    const userId = session?.user?.id;
+    if (!userId) {
+      setBankAccounts([]);
+      setNominees([]);
+      setIsLoadingOptions(false);
+      return;
+    }
+
+    setIsLoadingOptions(true);
+
+    try {
+      const [accounts, nomineeList] = await Promise.all([
+        getUserBankAccounts(userId),
+        getUserNominees(userId),
+      ]);
+      setBankAccounts(accounts);
+      setNominees(nomineeList);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Failed to load form data.';
+      console.error('NewFundRequest options error:', message);
+      Alert.alert('Unable to load form', message);
+    } finally {
+      setIsLoadingOptions(false);
+    }
+  }, [session?.user?.id]);
+
+  useEffect(() => {
+    loadFormOptions();
+  }, [loadFormOptions]);
 
   const goBackToInvestments = () => {
     if (navigation.canGoBack()) {
@@ -51,12 +108,92 @@ export default function NewFundRequestScreen({ navigation }: Props) {
     }
   };
 
-  const handleSubmit = () => {
-    // UI + form structure only — backend submission comes in a later stage
-    Alert.alert(
-      'Fund request ready',
-      'Form captured locally. Backend submission will be connected in the next stage.'
-    );
+  const handleSubmit = async () => {
+    const userId = session?.user?.id;
+    if (!userId) {
+      Alert.alert('Sign in required', 'Please sign in to submit a fund request.');
+      return;
+    }
+
+    if (!agreedToTerms) {
+      Alert.alert(
+        'Terms required',
+        'You must agree to the Terms & Conditions before submitting.'
+      );
+      return;
+    }
+
+    const amount = parseInrInput(fundAmount);
+    const amountError = validateFundAmount(amount);
+    if (amountError) {
+      Alert.alert('Invalid amount', amountError);
+      return;
+    }
+
+    if (!bankAccountId) {
+      Alert.alert('Bank account required', 'Please select a source bank account.');
+      return;
+    }
+
+    if (!nomineeId) {
+      Alert.alert('Nominee required', 'Please select a nominee.');
+      return;
+    }
+
+    if (bankAccounts.length === 0) {
+      Alert.alert(
+        'No bank accounts',
+        'Add a bank account before submitting a fund request.'
+      );
+      return;
+    }
+
+    if (nominees.length === 0) {
+      Alert.alert(
+        'No nominees',
+        'Add a nominee before submitting a fund request.'
+      );
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const ownsBank = await verifyBankAccountOwnership(userId, bankAccountId);
+      const ownsNominee = await verifyNomineeOwnership(userId, nomineeId);
+
+      if (!ownsBank) {
+        Alert.alert('Invalid bank account', 'Please select a valid bank account.');
+        return;
+      }
+
+      if (!ownsNominee) {
+        Alert.alert('Invalid nominee', 'Please select a valid nominee.');
+        return;
+      }
+
+      const payDate = parseDisplayPaydate(autoPaydate);
+
+      await createFundRequest({
+        userId,
+        fundAmount: amount,
+        bankAccountId,
+        nomineeId,
+        payDate,
+        referralCode: hasReferralCode ? referralCode : undefined,
+      });
+
+      navigation.navigate('MyInvestments');
+    } catch (error) {
+      const message = isMissingTableError(error)
+        ? MISSING_INVESTMENTS_TABLE_MESSAGE
+        : error instanceof Error
+          ? error.message
+          : 'Failed to submit fund request. Please try again.';
+      Alert.alert('Submission failed', message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -90,13 +227,19 @@ export default function NewFundRequestScreen({ navigation }: Props) {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
+          {isLoadingOptions ? (
+            <View style={styles.loadingWrap}>
+              <ActivityIndicator size="small" color={colors.primarySoft} />
+            </View>
+          ) : null}
+
           <FormSectionHeader icon="wallet-outline" title="FUND DETAILS" />
 
           <FormTextField
             label="Fund Amount (in ₹)"
             required
             placeholder="e.g. 1,00,000"
-            hint="Minimum fund is ₹1,00,000"
+            hint={`Minimum fund is ₹${FUND_AMOUNT_MINIMUM.toLocaleString('en-IN')}`}
             value={fundAmount}
             onChangeText={setFundAmount}
             keyboardType="numeric"
@@ -121,9 +264,13 @@ export default function NewFundRequestScreen({ navigation }: Props) {
             labelIcon={
               <Ionicons name="card-outline" size={15} color={colors.textPrimary} />
             }
-            placeholder="Select account"
+            placeholder={
+              bankAccounts.length === 0
+                ? 'No bank accounts found'
+                : 'Select account'
+            }
             value={bankAccountId}
-            options={DUMMY_BANK_ACCOUNTS.map((a) => ({
+            options={bankAccounts.map((a) => ({
               id: a.id,
               label: a.label,
             }))}
@@ -135,9 +282,11 @@ export default function NewFundRequestScreen({ navigation }: Props) {
           <FormSelectField
             label="Select Nominee"
             required
-            placeholder="Select an existing nominee"
+            placeholder={
+              nominees.length === 0 ? 'No nominees found' : 'Select an existing nominee'
+            }
             value={nomineeId}
-            options={DUMMY_NOMINEES.map((n) => ({
+            options={nominees.map((n) => ({
               id: n.id,
               label: n.name,
             }))}
@@ -176,15 +325,21 @@ export default function NewFundRequestScreen({ navigation }: Props) {
               style={styles.cancelBtn}
               activeOpacity={0.8}
               onPress={goBackToInvestments}
+              disabled={isSubmitting}
             >
               <Text style={styles.cancelText}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={styles.submitBtn}
+              style={[styles.submitBtn, isSubmitting && styles.submitBtnDisabled]}
               activeOpacity={0.85}
               onPress={handleSubmit}
+              disabled={isSubmitting}
             >
-              <Text style={styles.submitText}>Submit Fund</Text>
+              {isSubmitting ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.submitText}>Submit Fund</Text>
+              )}
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -237,6 +392,10 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 28,
   },
+  loadingWrap: {
+    alignItems: 'center',
+    marginBottom: 8,
+  },
   actions: {
     flexDirection: 'row',
     gap: 12,
@@ -264,6 +423,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  submitBtnDisabled: {
+    opacity: 0.7,
   },
   submitText: {
     fontSize: 15,

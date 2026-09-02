@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -6,11 +6,16 @@ import {
   FlatList,
   TouchableOpacity,
   Image,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import BankAccountCard from '../../components/BankAccountCard';
-import { DUMMY_BANK_ACCOUNTS_LIST } from '../../data/bankAccounts';
+import { useAuth } from '../../contexts/AuthContext';
+import { getUserBankAccountsList } from '../../services/bankAccountService';
+import { BankAccount } from '../../types/bankAccount';
+import { isMissingTableError } from '../../utils/supabaseErrors';
 import { MoreStackScreenProps } from '../../navigation/types';
 import { colors, spacing } from '../../theme/colors';
 
@@ -20,6 +25,43 @@ type Props = MoreStackScreenProps<'MyBankAccounts'>;
 
 export default function MyBankAccountsScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
+  const { session } = useAuth();
+  const [accounts, setAccounts] = useState<BankAccount[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const loadAccounts = useCallback(async () => {
+    const userId = session?.user?.id;
+    if (!userId) {
+      setAccounts([]);
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    setLoadError(null);
+
+    try {
+      const data = await getUserBankAccountsList(userId);
+      setAccounts(data);
+    } catch (error) {
+      if (isMissingTableError(error)) {
+        setAccounts([]);
+        return;
+      }
+      const message =
+        error instanceof Error ? error.message : 'Failed to load bank accounts.';
+      setLoadError(message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [session?.user?.id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadAccounts();
+    }, [loadAccounts])
+  );
 
   return (
     <View style={[styles.safe, { paddingTop: insets.top }]}>
@@ -53,7 +95,7 @@ export default function MyBankAccountsScreen({ navigation }: Props) {
       </View>
 
       <FlatList
-        data={DUMMY_BANK_ACCOUNTS_LIST}
+        data={accounts}
         keyExtractor={(item) => item.id}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
@@ -82,9 +124,26 @@ export default function MyBankAccountsScreen({ navigation }: Props) {
                 <Text style={styles.addBtnText}>Add Account</Text>
               </TouchableOpacity>
             </View>
+
+            {isLoading ? (
+              <View style={styles.loadingRow}>
+                <ActivityIndicator size="small" color={colors.primary} />
+              </View>
+            ) : null}
+
+            {loadError ? (
+              <Text style={styles.errorText}>{loadError}</Text>
+            ) : null}
           </View>
         }
         renderItem={({ item }) => <BankAccountCard account={item} />}
+        ListEmptyComponent={
+          !isLoading ? (
+            <View style={styles.empty}>
+              <Text style={styles.emptyText}>No bank accounts found</Text>
+            </View>
+          ) : null
+        }
       />
     </View>
   );
@@ -209,5 +268,22 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '700',
+  },
+  loadingRow: {
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  errorText: {
+    fontSize: 13,
+    color: colors.danger,
+    marginBottom: 12,
+  },
+  empty: {
+    paddingVertical: 32,
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 14,
+    color: colors.textSecondary,
   },
 });

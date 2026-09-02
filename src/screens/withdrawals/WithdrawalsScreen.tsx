@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -6,13 +6,18 @@ import {
   FlatList,
   TouchableOpacity,
   Image,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import WithdrawalCard from '../../components/WithdrawalCard';
+import { useAuth } from '../../contexts/AuthContext';
 import { DUMMY_WITHDRAWALS } from '../../data/withdrawals';
+import { getUserWithdrawals } from '../../services/withdrawalService';
+import { isMissingTableError } from '../../utils/supabaseErrors';
+import { WithdrawalRequest } from '../../types/withdrawal';
 import { WithdrawalsStackParamList } from '../../navigation/types';
 import { colors, spacing } from '../../theme/colors';
 
@@ -26,11 +31,50 @@ type Nav = NativeStackNavigationProp<
 export default function WithdrawalsScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<Nav>();
+  const { session } = useAuth();
+  const [userWithdrawals, setUserWithdrawals] = useState<WithdrawalRequest[]>(
+    []
+  );
+  const [isLoading, setIsLoading] = useState(false);
+
+  const loadUserWithdrawals = useCallback(async () => {
+    const userId = session?.user?.id;
+    if (!userId) {
+      setUserWithdrawals([]);
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const withdrawals = await getUserWithdrawals(userId);
+      setUserWithdrawals(withdrawals);
+    } catch (error) {
+      if (isMissingTableError(error)) {
+        // Migration 003 not applied yet — keep showing dummy withdrawals only.
+        setUserWithdrawals([]);
+        return;
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, [session?.user?.id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadUserWithdrawals();
+    }, [loadUserWithdrawals])
+  );
+
+  const withdrawals = useMemo(
+    () => [...userWithdrawals, ...DUMMY_WITHDRAWALS],
+    [userWithdrawals]
+  );
 
   return (
     <View style={[styles.safe, { paddingTop: insets.top }]}>
       <FlatList
-        data={DUMMY_WITHDRAWALS}
+        data={withdrawals}
         keyExtractor={(item) => item.id}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
@@ -67,6 +111,12 @@ export default function WithdrawalsScreen() {
               <Ionicons name="add" size={18} color="#FFFFFF" />
               <Text style={styles.newBtnText}>New Request</Text>
             </TouchableOpacity>
+
+            {isLoading ? (
+              <View style={styles.loadingRow}>
+                <ActivityIndicator size="small" color={colors.primary} />
+              </View>
+            ) : null}
           </View>
         }
         renderItem={({ item }) => <WithdrawalCard withdrawal={item} />}
@@ -162,5 +212,9 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '700',
+  },
+  loadingRow: {
+    alignItems: 'center',
+    marginBottom: 8,
   },
 });

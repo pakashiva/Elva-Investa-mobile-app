@@ -9,7 +9,7 @@ export const ADD_BANK_ACCOUNT_DEFAULTS: AddBankAccountFormValues = {
   confirmAccountNumber: '',
   ifscCode: '',
   accountType: 'Savings',
-  authorized: true,
+  authorized: false,
 };
 
 /** Basic IFSC format check for local UI validation only */

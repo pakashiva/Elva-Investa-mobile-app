@@ -5,6 +5,7 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -22,6 +23,7 @@ import {
   MoreStackParamList,
 } from '../../navigation/types';
 import { navigateToSignIn } from '../../utils/authNavigation';
+import { signOut } from '../../services/authService';
 import { colors, spacing } from '../../theme/colors';
 
 type Nav = CompositeNavigationProp<
@@ -56,6 +58,17 @@ function menuPressHandler(itemId: string, navigation: Nav) {
 export default function MoreScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<Nav>();
+
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      navigateToSignIn(navigation);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Unable to log out right now.';
+      Alert.alert('Logout failed', message);
+    }
+  };
 
   return (
     <View style={[styles.safe, { paddingTop: insets.top }]}>
@@ -103,7 +116,7 @@ export default function MoreScreen() {
         <TouchableOpacity
           style={styles.logoutCard}
           activeOpacity={0.8}
-          onPress={() => navigateToSignIn(navigation)}
+          onPress={handleLogout}
         >
           <View style={styles.logoutRow}>
             <Ionicons name="log-out-outline" size={22} color={colors.danger} />

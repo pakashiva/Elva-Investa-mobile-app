@@ -2,7 +2,6 @@ import {
   AddBankAccountFormErrors,
   AddBankAccountFormValues,
 } from '../types/bankAccountForm';
-import { isValidIfscFormat } from '../data/bankAccountForm';
 
 export function validateAddBankAccountForm(
   values: AddBankAccountFormValues
@@ -25,8 +24,6 @@ export function validateAddBankAccountForm(
 
   if (!values.ifscCode.trim()) {
     errors.ifscCode = 'IFSC code is required';
-  } else if (!isValidIfscFormat(values.ifscCode)) {
-    errors.ifscCode = 'Enter a valid IFSC code';
   }
 
   if (!values.authorized) {

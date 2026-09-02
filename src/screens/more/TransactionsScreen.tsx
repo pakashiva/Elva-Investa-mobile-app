@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -7,11 +7,16 @@ import {
   TouchableOpacity,
   Image,
   TextInput,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import TransactionCard from '../../components/TransactionCard';
-import { DUMMY_TRANSACTIONS } from '../../data/transactions';
+import { useAuth } from '../../contexts/AuthContext';
+import { getUserTransactions } from '../../services/transactionService';
+import { Transaction } from '../../types/transaction';
+import { isMissingTableError } from '../../utils/supabaseErrors';
 import { MoreStackScreenProps } from '../../navigation/types';
 import { colors, spacing } from '../../theme/colors';
 
@@ -21,7 +26,54 @@ type Props = MoreStackScreenProps<'Transactions'>;
 
 export default function TransactionsScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
+  const { session } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const loadTransactions = useCallback(async () => {
+    const userId = session?.user?.id;
+    if (!userId) {
+      setTransactions([]);
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    setLoadError(null);
+
+    try {
+      const data = await getUserTransactions(userId);
+      setTransactions(data);
+    } catch (error) {
+      if (isMissingTableError(error)) {
+        setTransactions([]);
+        return;
+      }
+      const message =
+        error instanceof Error ? error.message : 'Failed to load transactions.';
+      setLoadError(message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [session?.user?.id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadTransactions();
+    }, [loadTransactions])
+  );
+
+  const filteredTransactions = useMemo(() => {
+    const query = searchQuery.trim().toUpperCase();
+    if (!query) {
+      return transactions;
+    }
+    return transactions.filter((txn) =>
+      txn.txnId.toUpperCase().includes(query)
+    );
+  }, [searchQuery, transactions]);
 
   return (
     <View style={[styles.safe, { paddingTop: insets.top }]}>
@@ -58,44 +110,61 @@ export default function TransactionsScreen({ navigation }: Props) {
       </View>
 
       <FlatList
-        data={DUMMY_TRANSACTIONS}
+        data={filteredTransactions}
         keyExtractor={(item) => item.id}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={
-          <View style={styles.searchRow}>
-            <View style={styles.searchField}>
-              <Ionicons
-                name="search-outline"
-                size={18}
-                color={colors.textMuted}
-              />
-              <TextInput
-                style={styles.searchInput}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                placeholder="Search TXN ID..."
-                placeholderTextColor={colors.textMuted}
-                // Search filtering will be connected to backend later
-                autoCorrect={false}
-                autoCapitalize="characters"
-              />
+          <View>
+            <View style={styles.searchRow}>
+              <View style={styles.searchField}>
+                <Ionicons
+                  name="search-outline"
+                  size={18}
+                  color={colors.textMuted}
+                />
+                <TextInput
+                  style={styles.searchInput}
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  placeholder="Search TXN ID..."
+                  placeholderTextColor={colors.textMuted}
+                  autoCorrect={false}
+                  autoCapitalize="characters"
+                />
+              </View>
+              <TouchableOpacity
+                style={styles.filterBtn}
+                activeOpacity={0.75}
+                onPress={() => {}}
+              >
+                <Ionicons
+                  name="options-outline"
+                  size={20}
+                  color={colors.textPrimary}
+                />
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              style={styles.filterBtn}
-              activeOpacity={0.75}
-              // Filter functionality will be implemented later
-              onPress={() => {}}
-            >
-              <Ionicons
-                name="options-outline"
-                size={20}
-                color={colors.textPrimary}
-              />
-            </TouchableOpacity>
+
+            {isLoading ? (
+              <View style={styles.loadingRow}>
+                <ActivityIndicator size="small" color={colors.primary} />
+              </View>
+            ) : null}
+
+            {loadError ? (
+              <Text style={styles.errorText}>{loadError}</Text>
+            ) : null}
           </View>
         }
         renderItem={({ item }) => <TransactionCard transaction={item} />}
+        ListEmptyComponent={
+          !isLoading ? (
+            <View style={styles.empty}>
+              <Text style={styles.emptyText}>No transactions found</Text>
+            </View>
+          ) : null
+        }
       />
     </View>
   );
@@ -215,5 +284,22 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  loadingRow: {
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  errorText: {
+    fontSize: 13,
+    color: colors.danger,
+    marginBottom: 12,
+  },
+  empty: {
+    paddingVertical: 32,
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 14,
+    color: colors.textSecondary,
   },
 });

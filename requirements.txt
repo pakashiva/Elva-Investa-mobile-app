@@ -29,10 +29,16 @@ react-native-screens~=4.16.0
 # Dev
 babel-preset-expo~=54.0.10
 
-# Screens / flows (current UI — no backend yet)
-# - Sign In (app entry; dummy auth → Home; Register Now → Create Account)
-# - Create Account (scrollable registration form; image uploads local only)
-# - Verify Mobile Number (scrollable OTP + set password; dummy flow → Home)
+# Backend (Supabase)
+@supabase/supabase-js^=2.112.4
+@react-native-async-storage/async-storage~=2.2.0
+react-native-url-polyfill^=2.0.0
+expo-constants~=18.0.13
+
+# Screens / flows
+# - Sign In (Supabase email/password auth → Home)
+# - Create Account (Supabase registration: Auth + DB + Storage; temp → Home, OTP bypassed)
+# - Verify Mobile Number (OTP UI retained; not used after registration yet)
 # - Home dashboard
 # - My Investments / New Fund Request / Investment Details
 # - Withdrawals list / Create New Request (Submit Review UI only)
