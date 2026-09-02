@@ -9,6 +9,9 @@ import React, {
 import { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { getMobileVerifiedStatus } from '../services/profileService';
+import { OtpMode } from '../types/otp';
+
+export type OtpFlow = OtpMode | null;
 
 type AuthContextValue = {
   session: Session | null;
@@ -16,6 +19,11 @@ type AuthContextValue = {
   isAuthenticated: boolean;
   mobileVerified: boolean | null;
   isVerificationLoading: boolean;
+  otpFlow: OtpFlow;
+  bypassMobileVerification: boolean;
+  setOtpFlow: (flow: OtpFlow) => void;
+  clearOtpFlow: () => void;
+  setBypassMobileVerification: (value: boolean) => void;
   refreshMobileVerified: () => Promise<boolean | null>;
 };
 
@@ -26,6 +34,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [mobileVerified, setMobileVerified] = useState<boolean | null>(null);
   const [isVerificationLoading, setIsVerificationLoading] = useState(false);
+  const [otpFlow, setOtpFlowState] = useState<OtpFlow>(null);
+  const [bypassMobileVerification, setBypassMobileVerification] =
+    useState(false);
+
+  const setOtpFlow = useCallback((flow: OtpFlow) => {
+    setOtpFlowState(flow);
+  }, []);
+
+  const clearOtpFlow = useCallback(() => {
+    setOtpFlowState(null);
+  }, []);
 
   const loadMobileVerified = useCallback(
     async (userId: string | undefined, showLoading = true) => {
@@ -78,9 +97,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    } = supabase.auth.onAuthStateChange((event, nextSession) => {
       setSession(nextSession);
       setIsLoading(false);
+
+      if (event === 'SIGNED_OUT') {
+        setBypassMobileVerification(false);
+        setOtpFlowState(null);
+        setMobileVerified(null);
+      }
     });
 
     return () => {
@@ -93,6 +118,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     loadMobileVerified(session?.user?.id);
   }, [loadMobileVerified, session?.user?.id]);
 
+  useEffect(() => {
+    if (
+      !session?.user?.id ||
+      bypassMobileVerification ||
+      isVerificationLoading ||
+      mobileVerified !== false ||
+      otpFlow !== null
+    ) {
+      return;
+    }
+
+    setOtpFlowState('registration');
+  }, [
+    session?.user?.id,
+    bypassMobileVerification,
+    isVerificationLoading,
+    mobileVerified,
+    otpFlow,
+  ]);
+
   const value = useMemo(
     () => ({
       session,
@@ -100,6 +145,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isAuthenticated: Boolean(session),
       mobileVerified,
       isVerificationLoading,
+      otpFlow,
+      bypassMobileVerification,
+      setOtpFlow,
+      clearOtpFlow,
+      setBypassMobileVerification,
       refreshMobileVerified,
     }),
     [
@@ -107,6 +157,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isLoading,
       mobileVerified,
       isVerificationLoading,
+      otpFlow,
+      bypassMobileVerification,
+      setOtpFlow,
+      clearOtpFlow,
       refreshMobileVerified,
     ]
   );

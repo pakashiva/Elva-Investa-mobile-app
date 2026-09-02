@@ -13,9 +13,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import DetailMetricCard from '../../components/DetailMetricCard';
 import { useAuth } from '../../contexts/AuthContext';
-import { getInvestmentById } from '../../data/investments';
 import { getInvestmentByIdForUser } from '../../services/investmentService';
-import { isMissingTableError } from '../../utils/supabaseErrors';
 import { Investment } from '../../types/investment';
 import { AddFundsStackScreenProps } from '../../navigation/types';
 import { colors, spacing } from '../../theme/colors';
@@ -38,33 +36,24 @@ export default function InvestmentDetailsScreen({ navigation, route }: Props) {
     setIsLoading(true);
     setLoadError(null);
 
-    try {
-      if (userId) {
-        const fromDb = await getInvestmentByIdForUser(userId, investmentId);
-        if (fromDb) {
-          setInvestment(fromDb);
-          return;
-        }
-      }
+    if (!userId) {
+      setInvestment(null);
+      setLoadError('Please sign in to view investment details.');
+      setIsLoading(false);
+      return;
+    }
 
-      const dummy = getInvestmentById(investmentId);
-      setInvestment(dummy ?? null);
-      if (!dummy) {
+    try {
+      const fromDb = await getInvestmentByIdForUser(userId, investmentId);
+      setInvestment(fromDb);
+      if (!fromDb) {
         setLoadError('Investment not found.');
       }
     } catch (error) {
-      if (isMissingTableError(error)) {
-        const dummy = getInvestmentById(investmentId);
-        setInvestment(dummy ?? null);
-        return;
-      }
       const message =
         error instanceof Error ? error.message : 'Failed to load investment.';
       setLoadError(message);
-      const dummy = getInvestmentById(investmentId);
-      if (dummy) {
-        setInvestment(dummy);
-      }
+      setInvestment(null);
     } finally {
       setIsLoading(false);
     }
@@ -133,25 +122,27 @@ export default function InvestmentDetailsScreen({ navigation, route }: Props) {
 
         {loadError ? <Text style={styles.errorText}>{loadError}</Text> : null}
 
-        <View style={styles.grid}>
-          <DetailMetricCard
-            label="PRINCIPAL"
-            value={investment?.invested ?? '—'}
-          />
-          <DetailMetricCard
-            label="INTEREST RATE"
-            value={investment?.yieldRate ?? '—'}
-          />
-          <DetailMetricCard
-            label="TDS DEDUCTED"
-            value={investment?.tdsDeducted ?? '—'}
-          />
-          <DetailMetricCard
-            label="NET EARNED"
-            value={investment?.netEarned ?? '—'}
-            valueColor={colors.success}
-          />
-        </View>
+        {investment ? (
+          <View style={styles.grid}>
+            <DetailMetricCard
+              label="PRINCIPAL"
+              value={investment.invested ?? '—'}
+            />
+            <DetailMetricCard
+              label="INTEREST RATE"
+              value={investment.yieldRate ?? '—'}
+            />
+            <DetailMetricCard
+              label="TDS DEDUCTED"
+              value={investment.tdsDeducted ?? '—'}
+            />
+            <DetailMetricCard
+              label="NET EARNED"
+              value={investment.netEarned ?? '—'}
+              valueColor={colors.success}
+            />
+          </View>
+        ) : null}
       </ScrollView>
     </View>
   );

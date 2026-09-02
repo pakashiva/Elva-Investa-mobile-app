@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -14,7 +14,6 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import WithdrawalCard from '../../components/WithdrawalCard';
 import { useAuth } from '../../contexts/AuthContext';
-import { DUMMY_WITHDRAWALS } from '../../data/withdrawals';
 import { getUserWithdrawals } from '../../services/withdrawalService';
 import { isMissingTableError } from '../../utils/supabaseErrors';
 import { WithdrawalRequest } from '../../types/withdrawal';
@@ -36,6 +35,7 @@ export default function WithdrawalsScreen() {
     []
   );
   const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadUserWithdrawals = useCallback(async () => {
     const userId = session?.user?.id;
@@ -45,16 +45,19 @@ export default function WithdrawalsScreen() {
     }
 
     setIsLoading(true);
+    setLoadError(null);
 
     try {
       const withdrawals = await getUserWithdrawals(userId);
       setUserWithdrawals(withdrawals);
     } catch (error) {
       if (isMissingTableError(error)) {
-        // Migration 003 not applied yet — keep showing dummy withdrawals only.
         setUserWithdrawals([]);
         return;
       }
+      const message =
+        error instanceof Error ? error.message : 'Failed to load withdrawals.';
+      setLoadError(message);
     } finally {
       setIsLoading(false);
     }
@@ -66,15 +69,10 @@ export default function WithdrawalsScreen() {
     }, [loadUserWithdrawals])
   );
 
-  const withdrawals = useMemo(
-    () => [...userWithdrawals, ...DUMMY_WITHDRAWALS],
-    [userWithdrawals]
-  );
-
   return (
     <View style={[styles.safe, { paddingTop: insets.top }]}>
       <FlatList
-        data={withdrawals}
+        data={userWithdrawals}
         keyExtractor={(item) => item.id}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
@@ -117,9 +115,21 @@ export default function WithdrawalsScreen() {
                 <ActivityIndicator size="small" color={colors.primary} />
               </View>
             ) : null}
+            {loadError ? (
+              <Text style={styles.errorText}>{loadError}</Text>
+            ) : null}
           </View>
         }
         renderItem={({ item }) => <WithdrawalCard withdrawal={item} />}
+        ListEmptyComponent={
+          !isLoading ? (
+            <View style={styles.empty}>
+              <Text style={styles.emptyText}>
+                No withdrawal requests yet. Tap New Request to create one.
+              </Text>
+            </View>
+          ) : null
+        }
       />
     </View>
   );
@@ -216,5 +226,20 @@ const styles = StyleSheet.create({
   loadingRow: {
     alignItems: 'center',
     marginBottom: 8,
+  },
+  errorText: {
+    fontSize: 13,
+    color: colors.danger,
+    marginBottom: 8,
+  },
+  empty: {
+    paddingVertical: 40,
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
   },
 });

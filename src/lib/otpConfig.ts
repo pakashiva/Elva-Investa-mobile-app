@@ -21,7 +21,7 @@ export function getOtpApiKey(): string {
   const key = extra.otpApiKey?.trim();
   if (!key) {
     throw new Error(
-      'Missing OTP API key. Add EXPO_PUBLIC_OTP_API_KEY to your .env file.'
+      'OTP is not configured. Add EXPO_PUBLIC_OTP_API_KEY to .env or deploy the Supabase otp edge function.'
     );
   }
   return key;
@@ -29,4 +29,8 @@ export function getOtpApiKey(): string {
 
 export function getOtpBrandId(): string {
   return extra.otpBrandId?.trim() || 'elva-sales';
+}
+
+export function isDirectOtpConfigured(): boolean {
+  return Boolean(extra.otpApiKey?.trim());
 }

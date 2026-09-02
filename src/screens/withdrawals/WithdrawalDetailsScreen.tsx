@@ -1,19 +1,63 @@
-import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ActivityIndicator,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getWithdrawalById } from '../../data/withdrawals';
+import { useAuth } from '../../contexts/AuthContext';
+import { getWithdrawalByIdForUser } from '../../services/withdrawalService';
+import { WithdrawalRequest } from '../../types/withdrawal';
 import { WithdrawalsStackScreenProps } from '../../navigation/types';
 import { colors, spacing } from '../../theme/colors';
 
 type Props = WithdrawalsStackScreenProps<'WithdrawalDetails'>;
 
-/** Placeholder — withdrawal request details will be built in a later stage */
 export default function WithdrawalDetailsScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
-  const withdrawal = useMemo(
-    () => getWithdrawalById(route.params.withdrawalId),
-    [route.params.withdrawalId]
+  const { session } = useAuth();
+  const [withdrawal, setWithdrawal] = useState<WithdrawalRequest | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const loadWithdrawal = useCallback(async () => {
+    const userId = session?.user?.id;
+    const withdrawalId = route.params.withdrawalId;
+
+    setIsLoading(true);
+    setLoadError(null);
+
+    if (!userId) {
+      setWithdrawal(null);
+      setLoadError('Please sign in to view withdrawal details.');
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      const item = await getWithdrawalByIdForUser(userId, withdrawalId);
+      setWithdrawal(item);
+      if (!item) {
+        setLoadError('Withdrawal request not found.');
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Failed to load withdrawal.';
+      setLoadError(message);
+      setWithdrawal(null);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [route.params.withdrawalId, session?.user?.id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadWithdrawal();
+    }, [loadWithdrawal])
   );
 
   return (
@@ -29,11 +73,38 @@ export default function WithdrawalDetailsScreen({ navigation, route }: Props) {
         <Text style={styles.title}>Withdrawal Details</Text>
       </View>
       <View style={styles.body}>
-        <Text style={styles.code}>{withdrawal?.investmentCode ?? '—'}</Text>
-        <Text style={styles.name}>{withdrawal?.fundName ?? 'Request'}</Text>
-        <Text style={styles.placeholder}>
-          Full withdrawal request details will be available in a later step.
-        </Text>
+        {isLoading ? (
+          <ActivityIndicator size="small" color={colors.primary} />
+        ) : null}
+
+        {loadError ? <Text style={styles.errorText}>{loadError}</Text> : null}
+
+        {withdrawal ? (
+          <>
+            <Text style={styles.code}>{withdrawal.investmentCode}</Text>
+            <Text style={styles.name}>{withdrawal.fundName}</Text>
+            <View style={styles.row}>
+              <Text style={styles.label}>Status</Text>
+              <Text style={styles.value}>{withdrawal.status}</Text>
+            </View>
+            <View style={styles.row}>
+              <Text style={styles.label}>Requested</Text>
+              <Text style={styles.value}>{withdrawal.requestedAmount}</Text>
+            </View>
+            <View style={styles.row}>
+              <Text style={styles.label}>Net payout</Text>
+              <Text style={styles.value}>{withdrawal.netPayout}</Text>
+            </View>
+            <View style={styles.row}>
+              <Text style={styles.label}>Requested on</Text>
+              <Text style={styles.value}>{withdrawal.requestedOn}</Text>
+            </View>
+            <View style={styles.row}>
+              <Text style={styles.label}>{withdrawal.statusDateLabel}</Text>
+              <Text style={styles.value}>{withdrawal.statusDate}</Text>
+            </View>
+          </>
+        ) : null}
       </View>
     </View>
   );
@@ -81,11 +152,28 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
     color: colors.textPrimary,
-    marginBottom: 12,
+    marginBottom: 16,
   },
-  placeholder: {
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  label: {
     fontSize: 14,
     color: colors.textSecondary,
-    lineHeight: 20,
+  },
+  value: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  errorText: {
+    fontSize: 13,
+    color: colors.danger,
+    marginBottom: 12,
   },
 });

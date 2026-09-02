@@ -1,14 +1,21 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 
 const OTP_BASE_URL = 'https://api.notify.elvatech.in';
+const RESET_AUTHORIZATION_MINUTES = 10;
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers':
     'authorization, x-client-info, apikey, content-type',
 };
 
-type OtpAction = 'send' | 'resend' | 'verify' | 'resetPassword';
-type OtpMode = 'registration' | 'recovery';
+type OtpAction =
+  | 'send'
+  | 'resend'
+  | 'verify'
+  | 'resetPassword'
+  | 'completePasswordReset';
+type OtpMode = 'registration' | 'recovery' | 'forgotPassword';
 
 type OtpRequestBody = {
   action?: OtpAction;
@@ -41,6 +48,13 @@ function json(body: Record<string, unknown>, status = 200): Response {
   });
 }
 
+function normalizeOtpMode(mode: OtpMode | undefined): 'registration' | 'recovery' {
+  if (mode === 'recovery' || mode === 'forgotPassword') {
+    return 'recovery';
+  }
+  return 'registration';
+}
+
 function normalizePhoneForOtp(mobile: string): string {
   const digits = mobile.replace(/\D/g, '');
 
@@ -66,6 +80,22 @@ function maskMobileNumber(mobile: string): string {
     return mobile.trim() || '—';
   }
   return `+91 ${local.slice(0, 5)}XXXXX`;
+}
+
+function validatePasswordComplexity(password: string): string | null {
+  if (!password || password.length < 8) {
+    return 'Password must be at least 8 characters.';
+  }
+  if (!/[A-Z]/.test(password)) {
+    return 'Password must contain at least 1 uppercase letter.';
+  }
+  if (!/[0-9]/.test(password)) {
+    return 'Password must contain at least 1 number.';
+  }
+  if (!/[^A-Za-z0-9]/.test(password)) {
+    return 'Password must contain at least 1 special character.';
+  }
+  return null;
 }
 
 async function callOtpProvider(
@@ -154,6 +184,67 @@ async function getRegistrationProfile(
   return (data as ProfileRow | null) ?? null;
 }
 
+async function storePasswordResetAuthorization(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  email: string
+): Promise<void> {
+  const authorizedUntil = new Date(
+    Date.now() + RESET_AUTHORIZATION_MINUTES * 60 * 1000
+  ).toISOString();
+
+  const { error } = await supabaseAdmin
+    .from('password_reset_authorizations')
+    .upsert(
+      {
+        email: email.trim().toLowerCase(),
+        authorized_until: authorizedUntil,
+      },
+      { onConflict: 'email' }
+    );
+
+  if (error) {
+    throw new Error(
+      'OTP verified but password reset authorization failed. Apply migration 009_password_reset_authorization.sql.'
+    );
+  }
+}
+
+async function consumePasswordResetAuthorization(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  email: string
+): Promise<boolean> {
+  const normalizedEmail = email.trim().toLowerCase();
+
+  const { data, error } = await supabaseAdmin
+    .from('password_reset_authorizations')
+    .select('authorized_until')
+    .eq('email', normalizedEmail)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (!data?.authorized_until) {
+    return false;
+  }
+
+  if (new Date(data.authorized_until).getTime() < Date.now()) {
+    await supabaseAdmin
+      .from('password_reset_authorizations')
+      .delete()
+      .eq('email', normalizedEmail);
+    return false;
+  }
+
+  await supabaseAdmin
+    .from('password_reset_authorizations')
+    .delete()
+    .eq('email', normalizedEmail);
+
+  return true;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -178,11 +269,17 @@ Deno.serve(async (req) => {
     const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
     const body = (await req.json()) as OtpRequestBody;
     const action = body.action;
-    const mode: OtpMode = body.mode === 'recovery' ? 'recovery' : 'registration';
+    const mode = normalizeOtpMode(body.mode);
 
     if (
       !action ||
-      !['send', 'resend', 'verify', 'resetPassword'].includes(action)
+      ![
+        'send',
+        'resend',
+        'verify',
+        'resetPassword',
+        'completePasswordReset',
+      ].includes(action)
     ) {
       return json({ success: false, message: 'Invalid OTP action.' }, 400);
     }
@@ -243,6 +340,66 @@ Deno.serve(async (req) => {
       phone = normalizePhoneForOtp(profile.mobile_number);
     }
 
+    if (action === 'completePasswordReset') {
+      if (mode !== 'recovery' || !profile) {
+        return json(
+          { success: false, message: 'Password reset is only for recovery.' },
+          400
+        );
+      }
+
+      const email = body.email?.trim().toLowerCase() ?? profile.email_address;
+      const newPassword = body.newPassword?.trim();
+
+      if (!email) {
+        return json(
+          { success: false, message: 'Registered email address is required.' },
+          400
+        );
+      }
+
+      const passwordError = validatePasswordComplexity(newPassword ?? '');
+      if (passwordError) {
+        return json({ success: false, message: passwordError }, 400);
+      }
+
+      const authorized = await consumePasswordResetAuthorization(
+        supabaseAdmin,
+        email
+      );
+
+      if (!authorized) {
+        return json(
+          {
+            success: false,
+            message:
+              'Password reset not authorized. Verify OTP first or request a new code.',
+          },
+          403
+        );
+      }
+
+      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+        profile.user_id,
+        { password: newPassword }
+      );
+
+      if (updateError) {
+        return json(
+          {
+            success: false,
+            message: updateError.message ?? 'Failed to update password.',
+          },
+          500
+        );
+      }
+
+      return json({
+        success: true,
+        message: 'Password updated successfully.',
+      });
+    }
+
     if (action === 'resetPassword') {
       if (mode !== 'recovery' || !profile) {
         return json(
@@ -261,14 +418,9 @@ Deno.serve(async (req) => {
         );
       }
 
-      if (!newPassword || newPassword.length < 8) {
-        return json(
-          {
-            success: false,
-            message: 'Password must be at least 8 characters.',
-          },
-          400
-        );
+      const passwordError = validatePasswordComplexity(newPassword ?? '');
+      if (passwordError) {
+        return json({ success: false, message: passwordError }, 400);
       }
 
       const providerResult = await callOtpProvider('verify', phone, otp);
@@ -335,6 +487,13 @@ Deno.serve(async (req) => {
             500
           );
         }
+      }
+
+      if (mode === 'recovery' && body.email) {
+        await storePasswordResetAuthorization(
+          supabaseAdmin,
+          body.email.trim().toLowerCase()
+        );
       }
 
       return json({

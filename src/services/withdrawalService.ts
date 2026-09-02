@@ -118,6 +118,36 @@ export async function getUserWithdrawals(
   return (data ?? []).map((row) => mapWithdrawalRow(row as WithdrawalRow));
 }
 
+export async function getWithdrawalByIdForUser(
+  userId: string,
+  withdrawalId: string
+): Promise<WithdrawalRequest | null> {
+  const { data, error } = await supabase
+    .from('withdrawals')
+    .select(
+      `
+      *,
+      investments (
+        code,
+        name
+      )
+    `
+    )
+    .eq('user_id', userId)
+    .eq('id', withdrawalId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (!data) {
+    return null;
+  }
+
+  return mapWithdrawalRow(data as WithdrawalRow);
+}
+
 export async function createWithdrawalRequest(
   input: CreateWithdrawalInput
 ): Promise<WithdrawalRequest> {

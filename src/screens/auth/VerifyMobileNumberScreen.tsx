@@ -22,8 +22,8 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { useOtpCountdown } from '../../hooks/useOtpCountdown';
 import {
+  completePasswordReset,
   resendOtp,
-  resetPasswordWithOtp,
   sendOtp,
   verifyOtp,
 } from '../../services/otpService';
@@ -35,6 +35,7 @@ import {
 import { RootStackScreenProps } from '../../navigation/types';
 import { OtpMode } from '../../types/otp';
 import { maskMobileNumber } from '../../utils/phoneNumber';
+import { validatePasswordComplexity } from '../../utils/validatePassword';
 import { authColors } from '../../theme/authColors';
 import { colors, spacing } from '../../theme/colors';
 
@@ -44,10 +45,16 @@ type Props = RootStackScreenProps<'VerifyMobileNumber'>;
 
 export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
-  const { session, refreshMobileVerified } = useAuth();
+  const {
+    session,
+    refreshMobileVerified,
+    clearOtpFlow,
+    setBypassMobileVerification,
+  } = useAuth();
   const mode: OtpMode = route.params?.mode ?? 'registration';
+  const shouldSendOtpOnEntry = route.params?.sendOtp === true;
   const recoveryEmail = route.params?.email?.trim().toLowerCase() ?? '';
-  const isRecovery = mode === 'recovery';
+  const isForgotPassword = mode === 'forgotPassword';
 
   const [otp, setOtp] = useState(VERIFY_MOBILE_DEFAULTS.otp);
   const [newPassword, setNewPassword] = useState(
@@ -69,22 +76,23 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
 
   const { formatted, canResend, isExpired, reset } = useOtpCountdown(expiresIn);
 
-  const otpOptions = isRecovery
-    ? { mode: 'recovery' as const, email: recoveryEmail }
+  const otpOptions = isForgotPassword
+    ? { mode: 'forgotPassword' as const, email: recoveryEmail }
     : { mode: 'registration' as const, userId: session?.user?.id };
 
   const loadMobileNumber = useCallback(async () => {
-    if (isRecovery) {
+    if (isForgotPassword) {
       if (!recoveryEmail) {
         setErrorMessage('Registered email address is required.');
-        return;
       }
       return;
     }
 
     const userId = session?.user?.id;
     if (!userId) {
-      setErrorMessage('Please complete registration before verifying your mobile number.');
+      setErrorMessage(
+        'Please complete registration before verifying your mobile number.'
+      );
       return;
     }
 
@@ -102,11 +110,18 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
           : 'Failed to load mobile number.';
       setErrorMessage(message);
     }
-  }, [isRecovery, recoveryEmail, session?.user?.id]);
+  }, [isForgotPassword, recoveryEmail, session?.user?.id]);
 
   const handleSendOtp = useCallback(async () => {
-    if (isRecovery && !recoveryEmail) {
+    if (isForgotPassword && !recoveryEmail) {
       setErrorMessage('Registered email address is required.');
+      return;
+    }
+
+    if (!isForgotPassword && !session?.user?.id) {
+      setErrorMessage(
+        'Please complete registration before verifying your mobile number.'
+      );
       return;
     }
 
@@ -130,18 +145,18 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
     } finally {
       setIsSendingOtp(false);
     }
-  }, [isRecovery, otpOptions, recoveryEmail, reset]);
+  }, [isForgotPassword, otpOptions, recoveryEmail, reset, session?.user?.id]);
 
   useEffect(() => {
     loadMobileNumber();
   }, [loadMobileNumber]);
 
   useEffect(() => {
-    if (initialSendRef.current) {
+    if (!shouldSendOtpOnEntry || initialSendRef.current) {
       return;
     }
 
-    if (isRecovery) {
+    if (isForgotPassword) {
       if (!recoveryEmail) {
         setErrorMessage('Registered email address is required.');
         return;
@@ -152,7 +167,13 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
 
     initialSendRef.current = true;
     handleSendOtp();
-  }, [handleSendOtp, isRecovery, recoveryEmail, session?.user?.id]);
+  }, [
+    shouldSendOtpOnEntry,
+    handleSendOtp,
+    isForgotPassword,
+    recoveryEmail,
+    session?.user?.id,
+  ]);
 
   const handleResendOtp = async () => {
     if (!canResend || isResendingOtp || isSendingOtp) {
@@ -204,14 +225,20 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
     try {
       const response = await verifyOtp(cleanedOtp, otpOptions);
 
-      if (isRecovery) {
+      if (isForgotPassword) {
         setOtpVerified(true);
         setStatusMessage(response.message);
         return;
       }
 
-      await markMobileVerified();
+      try {
+        await markMobileVerified();
+      } catch {
+        // Edge function may have already updated mobile_verified.
+      }
+
       await refreshMobileVerified();
+      clearOtpFlow();
       setStatusMessage(response.message);
       navigation.reset({
         index: 0,
@@ -227,7 +254,7 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
   };
 
   const handleSetPasswordAndContinue = async () => {
-    if (!isRecovery || isResettingPassword) {
+    if (!isForgotPassword || isResettingPassword) {
       return;
     }
 
@@ -236,8 +263,9 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
       return;
     }
 
-    if (!newPassword || newPassword.length < 8) {
-      setErrorMessage('Password must be at least 8 characters.');
+    const passwordError = validatePasswordComplexity(newPassword);
+    if (passwordError) {
+      setErrorMessage(passwordError);
       return;
     }
 
@@ -246,21 +274,13 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
       return;
     }
 
-    const cleanedOtp = otp.replace(/\D/g, '');
-    if (!/^\d{6}$/.test(cleanedOtp)) {
-      setErrorMessage('Please enter the 6-digit OTP.');
-      return;
-    }
-
     setIsResettingPassword(true);
     setErrorMessage(null);
 
     try {
-      const response = await resetPasswordWithOtp(
-        recoveryEmail,
-        cleanedOtp,
-        newPassword
-      );
+      const response = await completePasswordReset(recoveryEmail, newPassword);
+      setBypassMobileVerification(true);
+      clearOtpFlow();
       await signInWithEmail(recoveryEmail, newPassword);
       setStatusMessage(response.message);
       navigation.reset({
@@ -277,10 +297,11 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
   };
 
   const handleBack = async () => {
-    if (!isRecovery && session) {
+    if (!isForgotPassword && session) {
       await signOut();
     }
 
+    clearOtpFlow();
     navigation.reset({
       index: 0,
       routes: [{ name: 'SignIn' }],
@@ -294,10 +315,7 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
     otp.replace(/\D/g, '').length !== 6;
 
   const passwordContinueDisabled =
-    isResettingPassword ||
-    !otpVerified ||
-    !newPassword ||
-    !confirmPassword;
+    isResettingPassword || !otpVerified || !newPassword || !confirmPassword;
 
   return (
     <View style={styles.safe}>
@@ -417,7 +435,7 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
             )}
           </TouchableOpacity>
 
-          {isRecovery ? (
+          {isForgotPassword && otpVerified ? (
             <View style={styles.passwordSection}>
               <Text style={styles.passwordHeading}>Set Your Password</Text>
 
@@ -459,15 +477,7 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
                 )}
               </TouchableOpacity>
             </View>
-          ) : (
-            <View style={styles.passwordSection}>
-              <Text style={styles.passwordHeading}>Set Your Password</Text>
-              <Text style={styles.passwordHint}>
-                Your password was created during registration. Verify your mobile
-                number above to continue.
-              </Text>
-            </View>
-          )}
+          ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
     </View>

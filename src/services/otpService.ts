@@ -1,15 +1,18 @@
-import { OtpMode } from '../types/otp';
+import { FunctionsHttpError } from '@supabase/supabase-js';
+import { supabase } from '../lib/supabase';
 import {
   getOtpApiBaseUrl,
   getOtpApiKey,
   getOtpAppId,
   getOtpBrandId,
+  isDirectOtpConfigured,
 } from '../lib/otpConfig';
+import { OtpMode } from '../types/otp';
 import { normalizePhoneForOtp, maskMobileNumber } from '../utils/phoneNumber';
 import {
+  completePasswordRecovery,
   getProfileMobileNumber,
   getRecoveryMobileByEmail,
-  completePasswordRecovery,
 } from './profileService';
 
 export type OtpActionResponse = {
@@ -32,13 +35,20 @@ type PhoneContext = {
   maskedPhone: string;
 };
 
+type EdgeOtpBody = {
+  action: 'completePasswordReset';
+  mode?: OtpMode;
+  email?: string;
+  newPassword?: string;
+};
+
 async function resolvePhone(
   mode: OtpMode,
   options?: { userId?: string; email?: string }
 ): Promise<PhoneContext> {
   let rawMobile: string | null = null;
 
-  if (mode === 'recovery') {
+  if (mode === 'forgotPassword') {
     const email = options?.email?.trim().toLowerCase();
     if (!email) {
       throw new Error('Registered email address is required.');
@@ -110,6 +120,51 @@ async function callElvatechOtp(
   };
 }
 
+async function readEdgeFunctionErrorMessage(
+  error: FunctionsHttpError
+): Promise<string> {
+  try {
+    const body = (await error.context.json()) as { message?: string };
+    if (body?.message) {
+      return body.message;
+    }
+  } catch {
+    // Fall through to generic message.
+  }
+
+  return error.message;
+}
+
+async function invokePasswordResetEdgeFunction(
+  body: EdgeOtpBody
+): Promise<OtpActionResponse> {
+  const { data, error } = await supabase.functions.invoke<OtpActionResponse>(
+    'otp',
+    { body }
+  );
+
+  if (error) {
+    if (error instanceof FunctionsHttpError) {
+      throw new Error(await readEdgeFunctionErrorMessage(error));
+    }
+
+    if (error.message?.includes('Requested function was not found')) {
+      throw new Error('OTP edge function is not deployed.');
+    }
+
+    throw new Error(error.message ?? 'Password reset request failed.');
+  }
+
+  if (!data?.success) {
+    throw new Error(data?.message ?? 'Password reset request failed.');
+  }
+
+  return {
+    success: true,
+    message: data.message ?? 'Password updated successfully.',
+  };
+}
+
 export async function sendOtp(options?: {
   mode?: OtpMode;
   email?: string;
@@ -120,6 +175,12 @@ export async function sendOtp(options?: {
     email: options?.email,
     userId: options?.userId,
   });
+
+  if (!isDirectOtpConfigured()) {
+    throw new Error(
+      'OTP is not configured. Add EXPO_PUBLIC_OTP_API_KEY to .env and restart Expo.'
+    );
+  }
 
   const response = await callElvatechOtp('send', phoneContext.phone);
   return {
@@ -138,6 +199,12 @@ export async function resendOtp(options?: {
     email: options?.email,
     userId: options?.userId,
   });
+
+  if (!isDirectOtpConfigured()) {
+    throw new Error(
+      'OTP is not configured. Add EXPO_PUBLIC_OTP_API_KEY to .env and restart Expo.'
+    );
+  }
 
   const response = await callElvatechOtp('resend', phoneContext.phone);
   return {
@@ -162,19 +229,45 @@ export async function verifyOtp(
     userId: options?.userId,
   });
 
+  if (!isDirectOtpConfigured()) {
+    throw new Error(
+      'OTP is not configured. Add EXPO_PUBLIC_OTP_API_KEY to .env and restart Expo.'
+    );
+  }
+
   return callElvatechOtp('verify', phoneContext.phone, cleaned);
 }
 
-export async function resetPasswordWithOtp(
+export async function completePasswordReset(
   email: string,
-  otp: string,
   newPassword: string
 ): Promise<OtpActionResponse> {
-  await verifyOtp(otp, { mode: 'recovery', email });
-  await completePasswordRecovery(email, newPassword);
+  const normalizedEmail = email.trim().toLowerCase();
 
-  return {
-    success: true,
-    message: 'Password updated successfully.',
-  };
+  try {
+    await completePasswordRecovery(normalizedEmail, newPassword);
+    return {
+      success: true,
+      message: 'Password updated successfully.',
+    };
+  } catch (rpcError) {
+    const rpcMessage =
+      rpcError instanceof Error ? rpcError.message : 'Password reset failed.';
+
+    const rpcUnavailable =
+      rpcMessage.includes('008_otp_recovery') ||
+      rpcMessage.includes('Requested function was not found') ||
+      (rpcMessage.includes('function') && rpcMessage.includes('not found'));
+
+    if (!rpcUnavailable) {
+      throw rpcError instanceof Error ? rpcError : new Error(rpcMessage);
+    }
+
+    return invokePasswordResetEdgeFunction({
+      action: 'completePasswordReset',
+      mode: 'forgotPassword',
+      email: normalizedEmail,
+      newPassword,
+    });
+  }
 }

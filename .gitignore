@@ -10,3 +10,4 @@ web-build/
 .env
 .env.local
 .expo-test-bundle/
+.env.example

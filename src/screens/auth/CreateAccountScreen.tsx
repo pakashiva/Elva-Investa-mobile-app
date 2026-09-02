@@ -29,6 +29,7 @@ import {
 } from '../../data/registrationForm';
 import PasswordInput from '../../components/auth/PasswordInput';
 import { registerUser } from '../../services/registrationService';
+import { useAuth } from '../../contexts/AuthContext';
 import { detectBankNameFromIfsc } from '../../utils/bankName';
 import { RootStackScreenProps } from '../../navigation/types';
 import {
@@ -49,6 +50,7 @@ type UploadKey = 'aadhaarFront' | 'aadhaarBack' | 'panCard';
 
 export default function CreateAccountScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
+  const { setOtpFlow, setBypassMobileVerification } = useAuth();
   const [form, setForm] = useState(REGISTRATION_FORM_DEFAULTS);
   const [errors, setErrors] = useState<RegistrationFormErrors>({});
   const [uploadingKey, setUploadingKey] = useState<UploadKey | null>(null);
@@ -102,7 +104,12 @@ export default function CreateAccountScreen({ navigation }: Props) {
 
     try {
       await registerUser(form);
-      navigation.replace('VerifyMobileNumber', { mode: 'registration' });
+      setBypassMobileVerification(false);
+      setOtpFlow('registration');
+      navigation.replace('VerifyMobileNumber', {
+        mode: 'registration',
+        sendOtp: true,
+      });
     } catch (error) {
       const message =
         error instanceof Error

@@ -1,5 +1,7 @@
 export type WithdrawalStatus = 'Paid' | 'Approved' | 'Processing' | 'Rejected';
 
+export type WithdrawalStrategy = 'full' | 'partial';
+
 export interface WithdrawalRequest {
   id: string;
   investmentCode: string;

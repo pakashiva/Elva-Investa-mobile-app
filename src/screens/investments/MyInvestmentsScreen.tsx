@@ -16,7 +16,6 @@ import FilterChips from '../../components/FilterChips';
 import InvestmentCard from '../../components/InvestmentCard';
 import { useAuth } from '../../contexts/AuthContext';
 import {
-  DUMMY_INVESTMENTS,
   INVESTMENT_FILTERS,
   filterInvestments,
 } from '../../data/investments';
@@ -57,7 +56,6 @@ export default function MyInvestmentsScreen() {
       setUserInvestments(investments);
     } catch (error) {
       if (isMissingTableError(error)) {
-        // Migration 003 not applied yet — keep showing dummy investments only.
         setUserInvestments([]);
         return;
       }
@@ -75,10 +73,10 @@ export default function MyInvestmentsScreen() {
     }, [loadUserInvestments])
   );
 
-  const investments = useMemo(() => {
-    const merged = [...userInvestments, ...DUMMY_INVESTMENTS];
-    return filterInvestments(merged, filter);
-  }, [filter, userInvestments]);
+  const investments = useMemo(
+    () => filterInvestments(userInvestments, filter),
+    [filter, userInvestments]
+  );
 
   return (
     <View style={[styles.safe, { paddingTop: insets.top }]}>
@@ -153,9 +151,15 @@ export default function MyInvestmentsScreen() {
           />
         )}
         ListEmptyComponent={
-          <View style={styles.empty}>
-            <Text style={styles.emptyText}>No investments in this filter</Text>
-          </View>
+          !isLoading ? (
+            <View style={styles.empty}>
+              <Text style={styles.emptyText}>
+                {userInvestments.length === 0
+                  ? 'No investments yet. Tap Add New to submit a fund request.'
+                  : 'No investments in this filter.'}
+              </Text>
+            </View>
+          ) : null
         }
       />
     </View>

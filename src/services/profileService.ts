@@ -128,6 +128,15 @@ export async function completePasswordRecovery(
   });
 
   if (error) {
+    if (
+      error.message.includes('function') &&
+      (error.message.includes('does not exist') ||
+        error.message.includes('not found'))
+    ) {
+      throw new Error(
+        'Password recovery is unavailable. Apply migration 008_otp_recovery.sql in Supabase SQL Editor.'
+      );
+    }
     throw new Error(error.message);
   }
 }

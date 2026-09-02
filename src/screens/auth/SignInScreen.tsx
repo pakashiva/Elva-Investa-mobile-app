@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import BrandLogo from '../../components/auth/BrandLogo';
 import SignInTextField from '../../components/auth/SignInTextField';
 import { SIGN_IN_DEFAULTS } from '../../data/auth';
+import { useAuth } from '../../contexts/AuthContext';
 import { signInWithEmail } from '../../services/authService';
 import { RootStackScreenProps } from '../../navigation/types';
 import { authColors } from '../../theme/authColors';
@@ -23,6 +24,7 @@ type Props = RootStackScreenProps<'SignIn'>;
 
 export default function SignInScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
+  const { setBypassMobileVerification, clearOtpFlow } = useAuth();
   const [mobileOrEmail, setMobileOrEmail] = useState(
     SIGN_IN_DEFAULTS.mobileOrEmail
   );
@@ -43,10 +45,17 @@ export default function SignInScreen({ navigation }: Props) {
 
     setIsSubmitting(true);
     setErrorMessage(null);
+    setBypassMobileVerification(true);
+    clearOtpFlow();
 
     try {
       await signInWithEmail(mobileOrEmail, password);
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'MainTabs' }],
+      });
     } catch (error) {
+      setBypassMobileVerification(false);
       const message =
         error instanceof Error ? error.message : 'Unable to sign in right now.';
       setErrorMessage(message);
@@ -69,9 +78,11 @@ export default function SignInScreen({ navigation }: Props) {
     }
 
     setErrorMessage(null);
+    clearOtpFlow();
     navigation.navigate('VerifyMobileNumber', {
-      mode: 'recovery',
+      mode: 'forgotPassword',
       email,
+      sendOtp: true,
     });
   };
 

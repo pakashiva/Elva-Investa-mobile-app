@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { WithdrawalStrategy } from '../../data/withdrawalRequest';
+import { WithdrawalStrategy } from '../../types/withdrawal';
 import { colors } from '../../theme/colors';
 
 type Props = {

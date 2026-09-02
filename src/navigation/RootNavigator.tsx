@@ -1,9 +1,5 @@
 import React, { useEffect } from 'react';
-import {
-  ActivityIndicator,
-  View,
-  StyleSheet,
-} from 'react-native';
+import { ActivityIndicator, View, StyleSheet } from 'react-native';
 import {
   NavigationContainer,
   createNavigationContainerRef,
@@ -30,8 +26,14 @@ function LoadingScreen() {
 }
 
 function AuthNavigationHandler() {
-  const { session, isLoading, mobileVerified, isVerificationLoading } =
-    useAuth();
+  const {
+    session,
+    isLoading,
+    mobileVerified,
+    isVerificationLoading,
+    otpFlow,
+    bypassMobileVerification,
+  } = useAuth();
 
   useEffect(() => {
     if (isLoading || !navigationRef.isReady()) {
@@ -55,7 +57,10 @@ function AuthNavigationHandler() {
     }
 
     if (!session) {
-      if (currentRoute === 'VerifyMobileNumber' && currentParams?.mode === 'recovery') {
+      if (
+        currentRoute === 'VerifyMobileNumber' &&
+        currentParams?.mode === 'forgotPassword'
+      ) {
         return;
       }
 
@@ -68,30 +73,22 @@ function AuthNavigationHandler() {
       return;
     }
 
-    if (isVerificationLoading) {
+    if (
+      !bypassMobileVerification &&
+      otpFlow === 'registration' &&
+      (isVerificationLoading || mobileVerified === null)
+    ) {
       return;
     }
 
-    if (currentRoute === 'VerifyMobileNumber' && currentParams?.mode === 'recovery') {
+    if (
+      currentRoute === 'VerifyMobileNumber' &&
+      currentParams?.mode === 'forgotPassword'
+    ) {
       return;
     }
 
-    if (mobileVerified === false) {
-      if (currentRoute !== 'VerifyMobileNumber') {
-        navigationRef.reset({
-          index: 0,
-          routes: [
-            {
-              name: 'VerifyMobileNumber',
-              params: { mode: 'registration' },
-            },
-          ],
-        });
-      }
-      return;
-    }
-
-    if (mobileVerified === true) {
+    if (bypassMobileVerification) {
       if (currentRoute && authRoutes.has(currentRoute)) {
         navigationRef.reset({
           index: 0,
@@ -101,31 +98,59 @@ function AuthNavigationHandler() {
       return;
     }
 
-    if (
-      currentRoute &&
-      authRoutes.has(currentRoute) &&
-      currentRoute !== 'VerifyMobileNumber' &&
-      currentRoute !== 'CreateAccount'
-    ) {
+    if (otpFlow === 'registration') {
+      if (
+        currentRoute !== 'VerifyMobileNumber' ||
+        currentParams?.mode !== 'registration'
+      ) {
+        navigationRef.reset({
+          index: 0,
+          routes: [
+            {
+              name: 'VerifyMobileNumber',
+              params: { mode: 'registration', sendOtp: true },
+            },
+          ],
+        });
+      }
+      return;
+    }
+
+    if (currentRoute && authRoutes.has(currentRoute)) {
       navigationRef.reset({
         index: 0,
-        routes: [
-          {
-            name: 'VerifyMobileNumber',
-            params: { mode: 'registration' },
-          },
-        ],
+        routes: [{ name: 'MainTabs' }],
       });
     }
-  }, [session, isLoading, mobileVerified, isVerificationLoading]);
+  }, [
+    session,
+    isLoading,
+    mobileVerified,
+    isVerificationLoading,
+    otpFlow,
+    bypassMobileVerification,
+  ]);
 
   return null;
 }
 
 export default function RootNavigator() {
-  const { isLoading } = useAuth();
+  const {
+    isLoading,
+    session,
+    otpFlow,
+    bypassMobileVerification,
+    mobileVerified,
+    isVerificationLoading,
+  } = useAuth();
 
-  if (isLoading) {
+  const waitingForProfile =
+    Boolean(session) &&
+    !bypassMobileVerification &&
+    otpFlow === 'registration' &&
+    (mobileVerified === null || isVerificationLoading);
+
+  if (isLoading || waitingForProfile) {
     return <LoadingScreen />;
   }
 
