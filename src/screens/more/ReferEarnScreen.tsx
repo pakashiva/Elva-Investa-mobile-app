@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -7,17 +7,20 @@ import {
   TouchableOpacity,
   Image,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Clipboard from 'expo-clipboard';
+import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { REFERRAL_STEPS } from '../../data/referrals';
 import {
-  REFERRAL_LINK,
-  REFERRAL_STATS,
-  REFERRAL_STEPS,
-  RECENT_REFERRALS,
-} from '../../data/referrals';
+  formatReferralHistoryForDisplay,
+  formatReferralStatsForDisplay,
+  getReferralRewards,
+  getReferralStats,
+} from '../../services/referralService';
 import { MoreStackScreenProps } from '../../navigation/types';
 import { colors, spacing } from '../../theme/colors';
 
@@ -31,7 +34,64 @@ type Props = MoreStackScreenProps<'ReferEarn'>;
 export default function ReferEarnScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const [copied, setCopied] = useState(false);
+  const [referralCode, setReferralCode] = useState('');
+  const [statsCards, setStatsCards] = useState<
+    { id: string; label: string; value: string; footer: string }[]
+  >([]);
+  const [recentReferrals, setRecentReferrals] = useState<
+    { id: string; name: string; meta: string; amount: string }[]
+  >([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const loadReferralData = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError(null);
+
+    try {
+      const [stats, history] = await Promise.all([
+        getReferralStats(),
+        getReferralRewards(),
+      ]);
+
+      const displayStats = formatReferralStatsForDisplay(stats);
+      setReferralCode(stats.referralCode);
+      setStatsCards([
+        {
+          id: 'total',
+          label: 'Total Referrals',
+          value: displayStats.totalReferralsLabel,
+          footer: displayStats.totalReferralsFooter,
+        },
+        {
+          id: 'commission',
+          label: 'Total Commission',
+          value: displayStats.totalEarningsLabel,
+          footer: displayStats.totalEarningsFooter,
+        },
+        {
+          id: 'pending',
+          label: 'Pending',
+          value: displayStats.pendingLabel,
+          footer: displayStats.pendingFooter,
+        },
+      ]);
+      setRecentReferrals(formatReferralHistoryForDisplay(history));
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Failed to load referral data.';
+      setLoadError(message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadReferralData();
+    }, [loadReferralData])
+  );
 
   useEffect(() => {
     return () => {
@@ -40,7 +100,11 @@ export default function ReferEarnScreen({ navigation }: Props) {
   }, []);
 
   const handleCopy = async () => {
-    await Clipboard.setStringAsync(REFERRAL_LINK);
+    if (!referralCode) {
+      return;
+    }
+
+    await Clipboard.setStringAsync(referralCode);
     setCopied(true);
     if (resetTimer.current) clearTimeout(resetTimer.current);
     resetTimer.current = setTimeout(() => setCopied(false), 2000);
@@ -100,12 +164,13 @@ export default function ReferEarnScreen({ navigation }: Props) {
 
           <View style={styles.linkRow}>
             <Text style={styles.linkText} numberOfLines={1}>
-              {REFERRAL_LINK}
+              {referralCode || 'Loading referral code...'}
             </Text>
             <TouchableOpacity
               style={[styles.copyBtn, copied && styles.copyBtnDone]}
               activeOpacity={0.85}
               onPress={handleCopy}
+              disabled={!referralCode}
             >
               <Text style={styles.copyBtnText}>
                 {copied ? 'Copied' : 'Copy'}
@@ -114,8 +179,16 @@ export default function ReferEarnScreen({ navigation }: Props) {
           </View>
         </LinearGradient>
 
+        {isLoading ? (
+          <View style={styles.loadingWrap}>
+            <ActivityIndicator size="small" color={colors.primarySoft} />
+          </View>
+        ) : null}
+
+        {loadError ? <Text style={styles.errorText}>{loadError}</Text> : null}
+
         <View style={styles.statsRow}>
-          {REFERRAL_STATS.map((stat) => (
+          {statsCards.map((stat) => (
             <View key={stat.id} style={styles.statCard}>
               <Text style={styles.statLabel}>{stat.label}</Text>
               <Text style={styles.statValue}>{stat.value}</Text>
@@ -146,15 +219,21 @@ export default function ReferEarnScreen({ navigation }: Props) {
         </View>
 
         <Text style={styles.sectionTitle}>Recent Referrals</Text>
-        {RECENT_REFERRALS.map((item) => (
-          <View key={item.id} style={styles.recentCard}>
-            <View style={styles.recentLeft}>
-              <Text style={styles.recentName}>{item.name}</Text>
-              <Text style={styles.recentMeta}>{item.meta}</Text>
-            </View>
-            <Text style={styles.recentAmount}>{item.amount}</Text>
+        {recentReferrals.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyText}>No referral earnings yet.</Text>
           </View>
-        ))}
+        ) : (
+          recentReferrals.map((item) => (
+            <View key={item.id} style={styles.recentCard}>
+              <View style={styles.recentLeft}>
+                <Text style={styles.recentName}>{item.name}</Text>
+                <Text style={styles.recentMeta}>{item.meta}</Text>
+              </View>
+              <Text style={styles.recentAmount}>{item.amount}</Text>
+            </View>
+          ))
+        )}
       </ScrollView>
     </View>
   );
@@ -293,6 +372,16 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.textPrimary,
   },
+  loadingWrap: {
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  errorText: {
+    fontSize: 13,
+    color: colors.danger,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
   statsRow: {
     flexDirection: 'row',
     gap: STAT_GAP,
@@ -372,6 +461,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
     color: colors.textSecondary,
+  },
+  emptyCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 14,
+    paddingVertical: 18,
+    marginBottom: 10,
+  },
+  emptyText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
   },
   recentCard: {
     flexDirection: 'row',

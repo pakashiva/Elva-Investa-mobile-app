@@ -201,7 +201,7 @@ export async function createFundRequest(
       bank_account_id: input.bankAccountId,
       nominee_id: input.nomineeId,
       pay_date: input.payDate,
-      referral_code: input.referralCode?.trim() || null,
+      referral_code: input.referralCode?.trim().toUpperCase() || null,
       agreement_charges: AGREEMENT_CHARGES,
       status: 'Pending',
       name: 'New Fund Request',

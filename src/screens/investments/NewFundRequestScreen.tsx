@@ -32,6 +32,10 @@ import {
   validateFundAmount,
 } from '../../services/investmentService';
 import {
+  normalizeReferralCodeInput,
+  validateReferralCodeForSubmit,
+} from '../../services/referralService';
+import {
   getUserNominees,
   verifyNomineeOwnership,
 } from '../../services/nomineeService';
@@ -140,6 +144,18 @@ export default function NewFundRequestScreen({ navigation }: Props) {
       return;
     }
 
+    if (hasReferralCode && referralCode.trim()) {
+      const validation = await validateReferralCodeForSubmit(referralCode);
+      if (!validation.valid) {
+        Alert.alert(
+          'Invalid referral code',
+          validation.errorMessage ??
+            'Please enter a valid referral code or leave it blank.'
+        );
+        return;
+      }
+    }
+
     if (bankAccounts.length === 0) {
       Alert.alert(
         'No bank accounts',
@@ -180,7 +196,9 @@ export default function NewFundRequestScreen({ navigation }: Props) {
         bankAccountId,
         nomineeId,
         payDate,
-        referralCode: hasReferralCode ? referralCode : undefined,
+        referralCode: hasReferralCode
+          ? normalizeReferralCodeInput(referralCode)
+          : undefined,
       });
 
       navigation.navigate('MyInvestments');
@@ -304,7 +322,9 @@ export default function NewFundRequestScreen({ navigation }: Props) {
               label="Referral Code"
               placeholder="Enter referral code"
               value={referralCode}
-              onChangeText={setReferralCode}
+              onChangeText={(text) =>
+                setReferralCode(normalizeReferralCodeInput(text))
+              }
               autoCapitalize="characters"
             />
           ) : null}

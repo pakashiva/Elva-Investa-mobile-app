@@ -139,6 +139,7 @@ export type Database = {
           nominee_id: string;
           pay_date: string;
           referral_code: string | null;
+          referrer_user_id: string | null;
           agreement_charges: number;
           created_at: string;
           updated_at: string;
@@ -166,6 +167,7 @@ export type Database = {
           nominee_id: string;
           pay_date: string;
           referral_code?: string | null;
+          referrer_user_id?: string | null;
           agreement_charges?: number;
           created_at?: string;
           updated_at?: string;
@@ -275,6 +277,72 @@ export type Database = {
           },
         ];
       };
+      referral_codes: {
+        Row: {
+          id: string;
+          user_id: string;
+          referral_code: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          referral_code: string;
+          created_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['referral_codes']['Insert']>;
+        Relationships: [];
+      };
+      referral_rewards: {
+        Row: {
+          id: string;
+          referrer_user_id: string;
+          referred_user_id: string;
+          investment_id: string;
+          referral_code: string;
+          capital_amount: number;
+          referral_rate: number;
+          gross_bonus: number;
+          tds_rate: number;
+          tds_amount: number;
+          net_bonus: number;
+          status: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          referrer_user_id: string;
+          referred_user_id: string;
+          investment_id: string;
+          referral_code: string;
+          capital_amount: number;
+          referral_rate: number;
+          gross_bonus: number;
+          tds_rate: number;
+          tds_amount: number;
+          net_bonus: number;
+          status?: string;
+          created_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['referral_rewards']['Insert']>;
+        Relationships: [];
+      };
+      referral_settings: {
+        Row: {
+          id: number;
+          referral_rate: number;
+          tds_rate: number;
+          updated_at: string;
+        };
+        Insert: {
+          id?: number;
+          referral_rate?: number;
+          tds_rate?: number;
+          updated_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['referral_settings']['Insert']>;
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;
@@ -295,6 +363,30 @@ export type Database = {
       complete_password_recovery: {
         Args: { p_email: string; p_new_password: string };
         Returns: undefined;
+      };
+      get_my_referral_code: {
+        Args: Record<string, never>;
+        Returns: string;
+      };
+      validate_referral_code: {
+        Args: { p_code: string };
+        Returns: boolean;
+      };
+      get_my_referral_stats: {
+        Args: Record<string, never>;
+        Returns: Json;
+      };
+      get_my_referral_history: {
+        Args: Record<string, never>;
+        Returns: {
+          id: string;
+          referred_name: string;
+          investment_code: string | null;
+          capital_amount: number;
+          net_bonus: number;
+          referral_code: string;
+          created_at: string;
+        }[];
       };
     };
     Enums: {

@@ -23,7 +23,16 @@ export function formatTransactionDate(isoDate: string): string {
 }
 
 export function formatTransactionTypeLabel(type: TransactionType): string {
-  return type === 'instant_credit' ? 'Instant Credit' : 'Withdrawal';
+  switch (type) {
+    case 'instant_credit':
+      return 'Instant Credit';
+    case 'referral_bonus':
+      return 'Referral Bonus';
+    case 'withdrawal':
+      return 'Withdrawal';
+    default:
+      return type;
+  }
 }
 
 export function formatTransactionAmount(
@@ -31,7 +40,7 @@ export function formatTransactionAmount(
   amount: number
 ): { display: string; direction: 'credit' | 'debit' } {
   const formatted = formatInr(amount);
-  if (type === 'instant_credit') {
+  if (type === 'instant_credit' || type === 'referral_bonus') {
     return { display: `+ ${formatted}`, direction: 'credit' };
   }
   return { display: `- ${formatted}`, direction: 'debit' };
