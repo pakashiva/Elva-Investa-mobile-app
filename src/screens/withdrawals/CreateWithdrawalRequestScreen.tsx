@@ -31,12 +31,21 @@ import {
   getRequestedDateLabel,
 } from '../../services/withdrawalService';
 import { WithdrawalsStackScreenProps } from '../../navigation/types';
-import { formatInrPlain } from '../../utils/currency';
+import { formatInrPlain, parseInrInput } from '../../utils/currency';
 import {
   isMissingTableError,
   MISSING_INVESTMENTS_TABLE_MESSAGE,
 } from '../../utils/supabaseErrors';
+import { validatePartialWithdrawalAmount } from '../../utils/validatePartialWithdrawal';
+import { WithdrawalStrategy } from '../../types/withdrawal';
 import { colors, spacing } from '../../theme/colors';
+
+type FundOption = {
+  id: string;
+  label: string;
+  principal: number;
+  withdrawalAmount: number;
+};
 
 type Props = WithdrawalsStackScreenProps<'CreateWithdrawalRequest'>;
 
@@ -45,11 +54,10 @@ export default function CreateWithdrawalRequestScreen({ navigation }: Props) {
   const { session } = useAuth();
   const [fundId, setFundId] = useState<string | null>(null);
   const [bankId, setBankId] = useState<string | null>(null);
-  const [strategy] = useState<'full'>('full');
+  const [strategy, setStrategy] = useState<WithdrawalStrategy>('full');
+  const [partialAmountInput, setPartialAmountInput] = useState('');
   const [agreed, setAgreed] = useState(false);
-  const [fundOptions, setFundOptions] = useState<
-    { id: string; label: string; withdrawalAmount: number }[]
-  >([]);
+  const [fundOptions, setFundOptions] = useState<FundOption[]>([]);
   const [bankOptions, setBankOptions] = useState<{ id: string; label: string }[]>(
     []
   );
@@ -63,9 +71,48 @@ export default function CreateWithdrawalRequestScreen({ navigation }: Props) {
     [fundId, fundOptions]
   );
 
-  const withdrawalAmountDisplay = selectedFund
-    ? formatInrPlain(selectedFund.withdrawalAmount)
-    : '';
+  const isPartial = strategy === 'partial';
+
+  const withdrawalAmountDisplay = useMemo(() => {
+    if (!selectedFund) {
+      return '';
+    }
+    if (isPartial) {
+      return partialAmountInput;
+    }
+    return formatInrPlain(selectedFund.withdrawalAmount);
+  }, [isPartial, partialAmountInput, selectedFund]);
+
+  const partialAmountHint = useMemo(() => {
+    if (!selectedFund || !isPartial) {
+      return null;
+    }
+    const maxWithdrawable = selectedFund.principal - 100000;
+    return `Withdraw from principal. Max ₹${maxWithdrawable.toLocaleString('en-IN')} (min ₹1,00,000 balance).`;
+  }, [isPartial, selectedFund]);
+
+  const handleFundChange = (nextFundId: string | null) => {
+    setFundId(nextFundId);
+    setPartialAmountInput('');
+    const fund = fundOptions.find((item) => item.id === nextFundId);
+    if (fund && fund.principal <= 100000) {
+      setStrategy('full');
+    }
+  };
+
+  const handleStrategyChange = (nextStrategy: WithdrawalStrategy) => {
+    if (
+      nextStrategy === 'partial' &&
+      selectedFund &&
+      selectedFund.principal <= 100000
+    ) {
+      return;
+    }
+    setStrategy(nextStrategy);
+    if (nextStrategy === 'full') {
+      setPartialAmountInput('');
+    }
+  };
 
   const loadFormOptions = useCallback(async () => {
     const userId = session?.user?.id;
@@ -93,6 +140,7 @@ export default function CreateWithdrawalRequestScreen({ navigation }: Props) {
           funds.map((fund) => ({
             id: fund.id,
             label: fund.label,
+            principal: fund.principal,
             withdrawalAmount: fund.withdrawalAmount,
           }))
         );
@@ -176,6 +224,21 @@ export default function CreateWithdrawalRequestScreen({ navigation }: Props) {
         return;
       }
 
+      let withdrawalAmount: number;
+      if (strategy === 'partial') {
+        withdrawalAmount = parseInrInput(partialAmountInput);
+        const validationError = validatePartialWithdrawalAmount(
+          activeInvestment.principal,
+          withdrawalAmount
+        );
+        if (validationError) {
+          Alert.alert('Invalid amount', validationError);
+          return;
+        }
+      } else {
+        withdrawalAmount = activeInvestment.withdrawalAmount;
+      }
+
       const ownsBank = await verifyBankAccountOwnership(userId, bankId);
       if (!ownsBank) {
         Alert.alert('Invalid bank account', 'Please select a valid bank account.');
@@ -186,7 +249,8 @@ export default function CreateWithdrawalRequestScreen({ navigation }: Props) {
         userId,
         investmentId: activeInvestment.id,
         bankAccountId: bankId,
-        withdrawalAmount: activeInvestment.withdrawalAmount,
+        withdrawalAmount,
+        strategy,
       });
 
       navigation.navigate('WithdrawalsList');
@@ -251,7 +315,7 @@ export default function CreateWithdrawalRequestScreen({ navigation }: Props) {
             }
             value={fundId}
             options={fundOptions}
-            onChange={setFundId}
+            onChange={handleFundChange}
           />
 
           <FormSelectField
@@ -267,22 +331,37 @@ export default function CreateWithdrawalRequestScreen({ navigation }: Props) {
 
           <WithdrawalStrategyCards
             value={strategy}
-            onChange={() => {}}
-            disablePartial
+            onChange={handleStrategyChange}
+            disablePartial={
+              !selectedFund || selectedFund.principal <= 100000
+            }
           />
 
           <View style={styles.amountWrap}>
             <Text style={styles.fieldLabel}>Withdrawal Amount</Text>
-            <View style={[styles.amountField, styles.amountFieldDisabled]}>
+            <View
+              style={[
+                styles.amountField,
+                !isPartial && styles.amountFieldDisabled,
+              ]}
+            >
               <Text style={styles.currency}>₹</Text>
               <TextInput
-                style={[styles.amountInput, styles.amountInputDisabled]}
+                style={[
+                  styles.amountInput,
+                  !isPartial && styles.amountInputDisabled,
+                ]}
                 value={withdrawalAmountDisplay}
-                editable={false}
-                placeholder="0.00"
+                editable={isPartial}
+                keyboardType="numeric"
+                onChangeText={setPartialAmountInput}
+                placeholder={isPartial ? 'Enter amount' : '0.00'}
                 placeholderTextColor={colors.textMuted}
               />
             </View>
+            {partialAmountHint ? (
+              <Text style={styles.amountHint}>{partialAmountHint}</Text>
+            ) : null}
           </View>
 
           <RequestTimelineBar requestedDate={requestedDate} />
@@ -371,6 +450,12 @@ const styles = StyleSheet.create({
   },
   amountWrap: {
     marginBottom: 18,
+  },
+  amountHint: {
+    marginTop: 6,
+    fontSize: 12,
+    lineHeight: 16,
+    color: colors.textSecondary,
   },
   amountField: {
     height: 56,

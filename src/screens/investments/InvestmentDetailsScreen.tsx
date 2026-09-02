@@ -18,7 +18,9 @@ import { Investment } from '../../types/investment';
 import { AddFundsStackScreenProps } from '../../navigation/types';
 import { colors, spacing } from '../../theme/colors';
 
-const avatarSource = require('../../../assets/avatar.png');
+import { BRAND_LOGO_MARK } from '../../constants/brandAssets';
+
+const avatarSource = BRAND_LOGO_MARK;
 
 type Props = AddFundsStackScreenProps<'InvestmentDetails'>;
 
@@ -103,7 +105,11 @@ export default function InvestmentDetailsScreen({ navigation, route }: Props) {
             <View style={styles.notifBadge} />
           </TouchableOpacity>
           <TouchableOpacity style={styles.profileRow} activeOpacity={0.7}>
-            <Image source={avatarSource} style={styles.avatar} />
+            <Image
+              source={avatarSource}
+              style={styles.avatar}
+              resizeMode="contain"
+            />
             <Ionicons name="chevron-down" size={14} color="#5A6577" />
           </TouchableOpacity>
         </View>
@@ -225,7 +231,9 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: '#D0D5DD',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
   },
   scroll: {
     flex: 1,

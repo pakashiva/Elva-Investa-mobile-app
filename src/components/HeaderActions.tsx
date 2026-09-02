@@ -35,7 +35,7 @@ export default function HeaderActions({
         activeOpacity={0.7}
         onPress={onProfilePress}
       >
-        <Image source={avatarSource} style={styles.avatar} />
+        <Image source={avatarSource} style={styles.avatar} resizeMode="contain" />
         <Ionicons name="chevron-down" size={16} color="#5A6577" />
       </TouchableOpacity>
     </View>
@@ -78,6 +78,8 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#D0D5DD',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
   },
 });

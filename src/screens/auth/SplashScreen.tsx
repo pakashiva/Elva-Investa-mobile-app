@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import BrandLogo from '../../components/auth/BrandLogo';
+import { BRAND_NAME, BRAND_TAGLINE } from '../../constants/brandAssets';
 import { RootStackScreenProps } from '../../navigation/types';
 import { authColors } from '../../theme/authColors';
 
@@ -23,9 +24,9 @@ export default function SplashScreen({ navigation }: Props) {
     <View style={[styles.safe, { paddingTop: insets.top }]}>
       <StatusBar style="light" />
       <View style={styles.content}>
-        <BrandLogo />
-        <Text style={styles.title}>Venkatesh Traders</Text>
-        <Text style={styles.tagline}>Secure investments, premium returns</Text>
+        <BrandLogo size={112} />
+        <Text style={styles.title}>{BRAND_NAME}</Text>
+        <Text style={styles.tagline}>{BRAND_TAGLINE}</Text>
         <ActivityIndicator
           size="small"
           color={authColors.gold}

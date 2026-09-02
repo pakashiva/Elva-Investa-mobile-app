@@ -25,6 +25,8 @@ export type MoreStackParamList = {
   MyProfile: undefined;
   Settings: undefined;
   Transactions: undefined;
+  FAQ: undefined;
+  HelpSupport: undefined;
 };
 
 export type MainTabParamList = {

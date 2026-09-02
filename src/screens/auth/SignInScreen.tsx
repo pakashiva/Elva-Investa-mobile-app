@@ -13,6 +13,7 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import BrandLogo from '../../components/auth/BrandLogo';
+import { BRAND_NAME, BRAND_TAGLINE } from '../../constants/brandAssets';
 import SignInTextField from '../../components/auth/SignInTextField';
 import { SIGN_IN_DEFAULTS } from '../../data/auth';
 import { useAuth } from '../../contexts/AuthContext';
@@ -91,11 +92,9 @@ export default function SignInScreen({ navigation }: Props) {
       <StatusBar style="light" />
 
       <View style={[styles.header, { paddingTop: insets.top + 28 }]}>
-        <BrandLogo />
-        <Text style={styles.brandTitle}>Venkatesh Traders</Text>
-        <Text style={styles.brandTagline}>
-          Secure investments, premium returns
-        </Text>
+        <BrandLogo size={104} />
+        <Text style={styles.brandTitle}>{BRAND_NAME}</Text>
+        <Text style={styles.brandTagline}>{BRAND_TAGLINE}</Text>
       </View>
 
       <KeyboardAvoidingView

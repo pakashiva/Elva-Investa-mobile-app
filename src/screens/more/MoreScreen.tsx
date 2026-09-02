@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -18,6 +19,11 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MenuListItem from '../../components/MenuListItem';
 import { MENU_ITEMS } from '../../data/menu';
+import {
+  BRAND_LOGO,
+  BRAND_NAME,
+  BRAND_TAGLINE,
+} from '../../constants/brandAssets';
 import {
   MainTabParamList,
   MoreStackParamList,
@@ -50,6 +56,10 @@ function menuPressHandler(itemId: string, navigation: Nav) {
       return () => navigation.navigate('MyProfile');
     case 'settings':
       return () => navigation.navigate('Settings');
+    case 'faq':
+      return () => navigation.navigate('FAQ');
+    case 'helpSupport':
+      return () => navigation.navigate('HelpSupport');
     default:
       return undefined;
   }
@@ -95,10 +105,16 @@ export default function MoreScreen() {
             end={{ x: 1, y: 1 }}
             style={styles.brandBanner}
           >
-            <Text style={styles.brandName}>Roxru Financial</Text>
-            <Text style={styles.brandTagline}>
-              Premium Wealth & Invest Services
-            </Text>
+            <View style={styles.brandLogoWrap}>
+              <Image
+                source={BRAND_LOGO}
+                style={styles.brandLogo}
+                resizeMode="contain"
+                accessibilityLabel={`${BRAND_NAME} logo`}
+              />
+            </View>
+            <Text style={styles.brandName}>{BRAND_NAME}</Text>
+            <Text style={styles.brandTagline}>{BRAND_TAGLINE}</Text>
           </LinearGradient>
 
           <View style={styles.menuList}>
@@ -178,16 +194,33 @@ const styles = StyleSheet.create({
   brandBanner: {
     paddingHorizontal: 18,
     paddingVertical: 20,
+    alignItems: 'center',
+  },
+  brandLogoWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+    padding: 8,
+  },
+  brandLogo: {
+    width: 52,
+    height: 52,
   },
   brandName: {
     fontSize: 18,
     fontWeight: '700',
     color: '#FFFFFF',
     marginBottom: 4,
+    textAlign: 'center',
   },
   brandTagline: {
     fontSize: 13,
     color: 'rgba(255,255,255,0.85)',
+    textAlign: 'center',
   },
   menuList: {
     paddingVertical: 4,

@@ -26,6 +26,7 @@ export type CreateWithdrawalInput = {
   investmentId: string;
   bankAccountId: string;
   withdrawalAmount: number;
+  strategy: 'full' | 'partial';
 };
 
 const STATUS_DATE_LABEL: Record<WithdrawalStatus, string> = {
@@ -158,7 +159,7 @@ export async function createWithdrawalRequest(
       investment_id: input.investmentId,
       bank_account_id: input.bankAccountId,
       withdrawal_amount: input.withdrawalAmount,
-      strategy: 'full',
+      strategy: input.strategy,
       status: 'Processing',
     })
     .select(

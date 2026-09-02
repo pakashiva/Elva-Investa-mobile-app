@@ -1,17 +1,22 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
-import Svg, { Rect } from 'react-native-svg';
+import { View, StyleSheet, Image, ImageStyle, StyleProp } from 'react-native';
+import { BRAND_LOGO } from '../../constants/brandAssets';
 
-export default function BrandLogo() {
+type Props = {
+  size?: number;
+  imageStyle?: StyleProp<ImageStyle>;
+};
+
+export default function BrandLogo({ size = 96, imageStyle }: Props) {
   return (
     <View style={styles.wrap}>
-      <View style={styles.pill}>
-        <Svg width={56} height={28} viewBox="0 0 56 28">
-          <Rect x={10} y={6} width={5} height={16} rx={2} fill="#D4D8DE" />
-          <Rect x={18} y={4} width={5} height={20} rx={2} fill="#B8BEC8" />
-          <Rect x={26} y={6} width={5} height={16} rx={2} fill="#C5A059" />
-          <Rect x={34} y={8} width={5} height={12} rx={2} fill="#E8C97A" />
-        </Svg>
+      <View style={[styles.pill, { width: size + 24, height: size * 0.62 }]}>
+        <Image
+          source={BRAND_LOGO}
+          style={[styles.logo, { width: size, height: size * 0.72 }, imageStyle]}
+          resizeMode="contain"
+          accessibilityLabel="Venkatesh Traders logo"
+        />
       </View>
     </View>
   );
@@ -23,11 +28,13 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
   pill: {
-    width: 88,
-    height: 44,
-    borderRadius: 22,
+    borderRadius: 999,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  logo: {
+    backgroundColor: 'transparent',
   },
 });

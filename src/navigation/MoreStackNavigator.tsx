@@ -7,6 +7,8 @@ import ReferEarnScreen from '../screens/more/ReferEarnScreen';
 import MyProfileScreen from '../screens/more/MyProfileScreen';
 import SettingsScreen from '../screens/more/SettingsScreen';
 import TransactionsScreen from '../screens/more/TransactionsScreen';
+import FaqScreen from '../screens/more/FaqScreen';
+import HelpSupportScreen from '../screens/more/HelpSupportScreen';
 import { MoreStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<MoreStackParamList>();
@@ -43,6 +45,16 @@ export default function MoreStackNavigator() {
       <Stack.Screen
         name="Transactions"
         component={TransactionsScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="FAQ"
+        component={FaqScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="HelpSupport"
+        component={HelpSupportScreen}
         options={{ animation: 'slide_from_right' }}
       />
     </Stack.Navigator>

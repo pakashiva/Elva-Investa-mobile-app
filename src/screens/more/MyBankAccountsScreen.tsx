@@ -19,7 +19,9 @@ import { isMissingTableError } from '../../utils/supabaseErrors';
 import { MoreStackScreenProps } from '../../navigation/types';
 import { colors, spacing } from '../../theme/colors';
 
-const avatarSource = require('../../../assets/avatar.png');
+import { BRAND_LOGO_MARK } from '../../constants/brandAssets';
+
+const avatarSource = BRAND_LOGO_MARK;
 
 type Props = MoreStackScreenProps<'MyBankAccounts'>;
 
@@ -90,7 +92,11 @@ export default function MyBankAccountsScreen({ navigation }: Props) {
             />
             <View style={styles.notifBadge} />
           </TouchableOpacity>
-          <Image source={avatarSource} style={styles.avatar} />
+          <Image
+            source={avatarSource}
+            style={styles.avatar}
+            resizeMode="contain"
+          />
         </View>
       </View>
 
@@ -218,7 +224,9 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: '#D0D5DD',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
   },
   listContent: {
     paddingHorizontal: spacing.screen,

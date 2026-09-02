@@ -36,6 +36,8 @@ export type ActiveInvestmentOption = {
   label: string;
   code: string;
   name: string;
+  principal: number;
+  totalEarnings: number;
   withdrawalAmount: number;
 };
 
@@ -142,6 +144,8 @@ export async function getActiveInvestmentsForWithdrawal(
       code: row.code,
       name: row.name,
       label: `${row.code} · ${row.name}`,
+      principal,
+      totalEarnings,
       withdrawalAmount,
     };
   });
@@ -181,6 +185,8 @@ export async function getActiveInvestmentForUser(
     code: data.code,
     name: data.name,
     label: `${data.code} · ${data.name}`,
+    principal,
+    totalEarnings,
     withdrawalAmount,
   };
 }

@@ -36,7 +36,9 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const H_PAD = spacing.screen;
 const CARD_GAP = 12;
 const CARD_WIDTH = (SCREEN_WIDTH - H_PAD * 2 - CARD_GAP) / 2;
-const avatarSource = require('../../../assets/avatar.png');
+import { BRAND_LOGO_MARK } from '../../constants/brandAssets';
+
+const avatarSource = BRAND_LOGO_MARK;
 
 type HomeNav = BottomTabNavigationProp<MainTabParamList, 'Home'>;
 
@@ -238,7 +240,11 @@ export default function HomeScreen() {
               <View style={styles.badge} />
             </TouchableOpacity>
             <TouchableOpacity style={styles.profileRow} activeOpacity={0.7}>
-              <Image source={avatarSource} style={styles.avatar} />
+              <Image
+                source={avatarSource}
+                style={styles.avatar}
+                resizeMode="contain"
+              />
               <Ionicons name="chevron-down" size={16} color="#5A6577" />
             </TouchableOpacity>
           </View>
@@ -430,7 +436,9 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#D0D5DD',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
   },
   errorText: {
     fontSize: 13,
