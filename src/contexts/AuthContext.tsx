@@ -37,6 +37,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [otpFlow, setOtpFlowState] = useState<OtpFlow>(null);
   const [bypassMobileVerification, setBypassMobileVerification] =
     useState(false);
+  const profileRetryUserIdRef = React.useRef<string | null>(null);
 
   const setOtpFlow = useCallback((flow: OtpFlow) => {
     setOtpFlowState(flow);
@@ -136,6 +137,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isVerificationLoading,
     mobileVerified,
     otpFlow,
+  ]);
+
+  // If the first profile read raced ahead of profile creation (common during
+  // registration), retry once so mobileVerified becomes false instead of null.
+  useEffect(() => {
+    const userId = session?.user?.id;
+    if (!userId) {
+      profileRetryUserIdRef.current = null;
+      return;
+    }
+
+    if (
+      bypassMobileVerification ||
+      isVerificationLoading ||
+      mobileVerified !== null ||
+      profileRetryUserIdRef.current === userId
+    ) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      profileRetryUserIdRef.current = userId;
+      void loadMobileVerified(userId, false);
+    }, 600);
+
+    return () => clearTimeout(timer);
+  }, [
+    session?.user?.id,
+    bypassMobileVerification,
+    isVerificationLoading,
+    mobileVerified,
+    loadMobileVerified,
   ]);
 
   const value = useMemo(

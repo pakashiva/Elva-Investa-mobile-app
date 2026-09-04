@@ -74,14 +74,6 @@ function AuthNavigationHandler() {
     }
 
     if (
-      !bypassMobileVerification &&
-      otpFlow === 'registration' &&
-      (isVerificationLoading || mobileVerified === null)
-    ) {
-      return;
-    }
-
-    if (
       currentRoute === 'VerifyMobileNumber' &&
       currentParams?.mode === 'forgotPassword'
     ) {
@@ -98,7 +90,10 @@ function AuthNavigationHandler() {
       return;
     }
 
-    if (otpFlow === 'registration') {
+    const needsMobileVerification =
+      otpFlow === 'registration' || mobileVerified === false;
+
+    if (needsMobileVerification) {
       if (
         currentRoute !== 'VerifyMobileNumber' ||
         currentParams?.mode !== 'registration'
@@ -113,6 +108,11 @@ function AuthNavigationHandler() {
           ],
         });
       }
+      return;
+    }
+
+    // Profile status still loading — stay on the current screen.
+    if (isVerificationLoading || mobileVerified === null) {
       return;
     }
 
@@ -135,22 +135,12 @@ function AuthNavigationHandler() {
 }
 
 export default function RootNavigator() {
-  const {
-    isLoading,
-    session,
-    otpFlow,
-    bypassMobileVerification,
-    mobileVerified,
-    isVerificationLoading,
-  } = useAuth();
+  const { isLoading } = useAuth();
 
-  const waitingForProfile =
-    Boolean(session) &&
-    !bypassMobileVerification &&
-    otpFlow === 'registration' &&
-    (mobileVerified === null || isVerificationLoading);
-
-  if (isLoading || waitingForProfile) {
+  // Only block the tree while restoring the auth session.
+  // Never unmount NavigationContainer during registration OTP —
+  // that was leaving users stuck on a blank spinner.
+  if (isLoading) {
     return <LoadingScreen />;
   }
 

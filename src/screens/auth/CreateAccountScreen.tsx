@@ -50,7 +50,12 @@ type UploadKey = 'aadhaarFront' | 'aadhaarBack' | 'panCard';
 
 export default function CreateAccountScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
-  const { setOtpFlow, setBypassMobileVerification } = useAuth();
+  const {
+    setOtpFlow,
+    clearOtpFlow,
+    setBypassMobileVerification,
+    refreshMobileVerified,
+  } = useAuth();
   const [form, setForm] = useState(REGISTRATION_FORM_DEFAULTS);
   const [errors, setErrors] = useState<RegistrationFormErrors>({});
   const [uploadingKey, setUploadingKey] = useState<UploadKey | null>(null);
@@ -101,16 +106,21 @@ export default function CreateAccountScreen({ navigation }: Props) {
     }
 
     setIsSubmitting(true);
+    // Mark registration OTP flow before signup creates a session,
+    // so AuthNavigationHandler does not send the user to Home early.
+    setBypassMobileVerification(false);
+    setOtpFlow('registration');
 
     try {
       await registerUser(form);
-      setBypassMobileVerification(false);
-      setOtpFlow('registration');
+      // Profile now exists — refresh so mobileVerified is false, not null.
+      await refreshMobileVerified();
       navigation.replace('VerifyMobileNumber', {
         mode: 'registration',
         sendOtp: true,
       });
     } catch (error) {
+      clearOtpFlow();
       const message =
         error instanceof Error
           ? error.message
