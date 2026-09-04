@@ -1,10 +1,6 @@
 import { parseDateOfBirth } from '../utils/formatDate';
 import { RegistrationFormValues } from '../types/registrationForm';
 import { signUpWithEmail } from './authService';
-import {
-  removeKycDocuments,
-  uploadKycDocument,
-} from './kycStorageService';
 import { supabase } from '../lib/supabase';
 
 export type RegistrationResult = {
@@ -19,28 +15,30 @@ function toIsoDate(dateOfBirth: string): string {
   return `${year}-${month}-${day}`;
 }
 
-function assertDocumentSelected(
-  label: string,
-  document: RegistrationFormValues['aadhaarFront']
-): string {
-  if (!document.isUserSelected || !document.uri) {
-    throw new Error(`${label} must be selected from your device before submitting.`);
+async function assertEmailMobileComboAvailable(
+  email: string,
+  mobile: string
+): Promise<void> {
+  const { data, error } = await supabase.rpc('is_email_mobile_combo_available', {
+    p_email: email,
+    p_mobile: mobile,
+  });
+
+  if (error) {
+    throw new Error(error.message);
   }
-  return document.uri;
+
+  if (data === false) {
+    throw new Error(
+      'An account with this email and mobile number combination already exists. Try signing in, or use a different email/mobile pair.'
+    );
+  }
 }
 
 export async function registerUser(
   form: RegistrationFormValues
 ): Promise<RegistrationResult> {
-  const aadhaarFrontUri = assertDocumentSelected(
-    'Aadhaar front image',
-    form.aadhaarFront
-  );
-  const aadhaarBackUri = assertDocumentSelected(
-    'Aadhaar back image',
-    form.aadhaarBack
-  );
-  const panCardUri = assertDocumentSelected('PAN card image', form.panCard);
+  await assertEmailMobileComboAvailable(form.emailAddress, form.mobileNumber);
 
   const { session } = await signUpWithEmail(
     form.emailAddress,
@@ -55,27 +53,8 @@ export async function registerUser(
   }
 
   const userId = session.user.id;
-  const uploadedPaths: string[] = [];
 
   try {
-    const [aadhaarFrontPath, aadhaarBackPath, panCardPath] = await Promise.all([
-      uploadKycDocument(
-        userId,
-        'aadhaar_front',
-        aadhaarFrontUri,
-        form.aadhaarFront.fileName
-      ),
-      uploadKycDocument(
-        userId,
-        'aadhaar_back',
-        aadhaarBackUri,
-        form.aadhaarBack.fileName
-      ),
-      uploadKycDocument(userId, 'pan_card', panCardUri, form.panCard.fileName),
-    ]);
-
-    uploadedPaths.push(aadhaarFrontPath, aadhaarBackPath, panCardPath);
-
     const profileResult = await supabase.from('profiles').insert({
       user_id: userId,
       full_name: form.fullName.trim(),
@@ -91,6 +70,12 @@ export async function registerUser(
     });
 
     if (profileResult.error) {
+      const message = profileResult.error.message.toLowerCase();
+      if (message.includes('idx_profiles_email_mobile_combo') || message.includes('duplicate')) {
+        throw new Error(
+          'An account with this email and mobile number combination already exists.'
+        );
+      }
       throw new Error(profileResult.error.message);
     }
 
@@ -98,9 +83,9 @@ export async function registerUser(
       user_id: userId,
       aadhaar_number: form.aadhaarNumber.trim(),
       pan_number: form.panNumber.trim(),
-      aadhaar_front_path: aadhaarFrontPath,
-      aadhaar_back_path: aadhaarBackPath,
-      pan_card_path: panCardPath,
+      aadhaar_front_path: null,
+      aadhaar_back_path: null,
+      pan_card_path: null,
     });
 
     if (kycResult.error) {
@@ -135,14 +120,6 @@ export async function registerUser(
 
     return { userId };
   } catch (error) {
-    if (uploadedPaths.length) {
-      try {
-        await removeKycDocuments(uploadedPaths);
-      } catch {
-        // Best-effort cleanup only.
-      }
-    }
-
     await supabase.auth.signOut();
     throw error;
   }

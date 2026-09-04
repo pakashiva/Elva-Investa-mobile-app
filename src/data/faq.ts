@@ -97,7 +97,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
         id: 'withdrawals-2',
         question: 'What is the minimum balance for partial withdrawal?',
         answer:
-          'After a partial withdrawal, at least ₹1,00,000 must remain invested as principal. If your balance would fall below this limit, use full withdrawal instead.',
+          'There is no minimum remaining balance for partial withdrawals. You can withdraw any portion of your principal. To exit the investment completely, use Full Withdrawal.',
       },
       {
         id: 'withdrawals-3',

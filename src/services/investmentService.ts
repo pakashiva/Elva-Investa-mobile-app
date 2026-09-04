@@ -39,10 +39,14 @@ export type ActiveInvestmentOption = {
   principal: number;
   totalEarnings: number;
   withdrawalAmount: number;
+  openPartialAmount: number;
+  hasOpenFullWithdrawal: boolean;
+  availablePrincipal: number;
 };
 
 export type CreateFundRequestInput = {
   userId: string;
+  title: string;
   fundAmount: number;
   bankAccountId: string;
   nomineeId: string;
@@ -131,24 +135,82 @@ export async function getActiveInvestmentsForWithdrawal(
     throw new Error(error.message);
   }
 
-  return (data ?? []).map((row) => {
-    const principal = Number(row.fund_amount);
-    const totalEarnings = Number(row.total_earnings ?? 0);
-    const withdrawalAmount =
-      row.current_value != null
-        ? Number(row.current_value)
-        : principal + totalEarnings;
+  const investmentIds = (data ?? []).map((row) => row.id);
+  const openByInvestment = await getOpenWithdrawalTotals(investmentIds);
 
-    return {
-      id: row.id,
-      code: row.code,
-      name: row.name,
-      label: `${row.code} · ${row.name}`,
-      principal,
-      totalEarnings,
-      withdrawalAmount,
+  return (data ?? [])
+    .map((row) => {
+      const principal = Number(row.fund_amount);
+      const totalEarnings = Number(row.total_earnings ?? 0);
+      const withdrawalAmount =
+        row.current_value != null
+          ? Number(row.current_value)
+          : principal + totalEarnings;
+      const open = openByInvestment.get(row.id) ?? {
+        openPartialAmount: 0,
+        hasOpenFullWithdrawal: false,
+      };
+      const availablePrincipal = Math.max(
+        0,
+        principal - open.openPartialAmount
+      );
+
+      return {
+        id: row.id,
+        code: row.code,
+        name: row.name,
+        label: `${row.code} · ${row.name}`,
+        principal,
+        totalEarnings,
+        withdrawalAmount,
+        openPartialAmount: open.openPartialAmount,
+        hasOpenFullWithdrawal: open.hasOpenFullWithdrawal,
+        availablePrincipal,
+      };
+    })
+    .filter((row) => !row.hasOpenFullWithdrawal);
+}
+
+async function getOpenWithdrawalTotals(
+  investmentIds: string[]
+): Promise<
+  Map<string, { openPartialAmount: number; hasOpenFullWithdrawal: boolean }>
+> {
+  const map = new Map<
+    string,
+    { openPartialAmount: number; hasOpenFullWithdrawal: boolean }
+  >();
+
+  if (investmentIds.length === 0) {
+    return map;
+  }
+
+  const { data, error } = await supabase
+    .from('withdrawals')
+    .select('investment_id, withdrawal_amount, strategy, status')
+    .in('investment_id', investmentIds)
+    .in('status', ['Processing', 'Approved']);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  for (const row of data ?? []) {
+    const current = map.get(row.investment_id) ?? {
+      openPartialAmount: 0,
+      hasOpenFullWithdrawal: false,
     };
-  });
+
+    if (row.strategy === 'full') {
+      current.hasOpenFullWithdrawal = true;
+    } else if (row.status === 'Processing') {
+      current.openPartialAmount += Number(row.withdrawal_amount);
+    }
+
+    map.set(row.investment_id, current);
+  }
+
+  return map;
 }
 
 export async function getActiveInvestmentForUser(
@@ -173,6 +235,12 @@ export async function getActiveInvestmentForUser(
     return null;
   }
 
+  const openByInvestment = await getOpenWithdrawalTotals([data.id]);
+  const open = openByInvestment.get(data.id) ?? {
+    openPartialAmount: 0,
+    hasOpenFullWithdrawal: false,
+  };
+
   const principal = Number(data.fund_amount);
   const totalEarnings = Number(data.total_earnings ?? 0);
   const withdrawalAmount =
@@ -188,6 +256,9 @@ export async function getActiveInvestmentForUser(
     principal,
     totalEarnings,
     withdrawalAmount,
+    openPartialAmount: open.openPartialAmount,
+    hasOpenFullWithdrawal: open.hasOpenFullWithdrawal,
+    availablePrincipal: Math.max(0, principal - open.openPartialAmount),
   };
 }
 
@@ -197,6 +268,11 @@ export async function createFundRequest(
   const amountError = validateFundAmount(input.fundAmount);
   if (amountError) {
     throw new Error(amountError);
+  }
+
+  const title = input.title.trim();
+  if (!title) {
+    throw new Error('Fund title is required.');
   }
 
   const { data, error } = await supabase
@@ -210,8 +286,8 @@ export async function createFundRequest(
       referral_code: input.referralCode?.trim().toUpperCase() || null,
       agreement_charges: AGREEMENT_CHARGES,
       status: 'Pending',
-      name: 'New Fund Request',
-      detail_subtitle: 'New Fund Request',
+      name: title,
+      detail_subtitle: title,
       current_value: input.fundAmount,
       interest_rate: 0.05,
       tds_percent: 0.1,

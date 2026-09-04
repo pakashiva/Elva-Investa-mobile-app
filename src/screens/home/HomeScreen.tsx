@@ -28,16 +28,15 @@ import {
   formatInvestmentCountFooter,
   formatPaidWithdrawalFooter,
 } from '../../utils/homeFormat';
-import { isMissingTableError } from '../../utils/supabaseErrors';
+import { isJwtClockSkewError, isMissingTableError, withJwtRetry } from '../../utils/supabaseErrors';
 import { MainTabParamList } from '../../navigation/types';
 import { colors, spacing } from '../../theme/colors';
+import { BRAND_LOGO_MARK } from '../../constants/brandAssets';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const H_PAD = spacing.screen;
 const CARD_GAP = 12;
 const CARD_WIDTH = (SCREEN_WIDTH - H_PAD * 2 - CARD_GAP) / 2;
-import { BRAND_LOGO_MARK } from '../../constants/brandAssets';
-
 const avatarSource = BRAND_LOGO_MARK;
 
 type HomeNav = BottomTabNavigationProp<MainTabParamList, 'Home'>;
@@ -156,14 +155,17 @@ export default function HomeScreen() {
       };
     }
 
-    getProfileFullName(userId)
+    withJwtRetry(() => getProfileFullName(userId))
       .then((name) => {
         if (mounted && name) {
           setDisplayName(name);
         }
       })
       .catch((error) => {
-        console.warn('Failed to load profile name:', error.message);
+        console.warn(
+          'Failed to load profile name:',
+          error instanceof Error ? error.message : error
+        );
       });
 
     return () => {
@@ -188,6 +190,12 @@ export default function HomeScreen() {
     } catch (error) {
       if (isMissingTableError(error)) {
         setSummary(EMPTY_HOME_SUMMARY);
+        return;
+      }
+      // Clock skew is transient; keep the screen usable instead of a red banner.
+      if (isJwtClockSkewError(error)) {
+        setSummary(EMPTY_HOME_SUMMARY);
+        console.warn('Home summary delayed by JWT clock skew; will refresh on next focus.');
         return;
       }
       const message =

@@ -9,6 +9,7 @@ export type Nominee = {
 };
 
 export type NewFundRequestFormValues = {
+  title: string;
   fundAmount: string;
   paydate: string;
   bankAccountId: string | null;

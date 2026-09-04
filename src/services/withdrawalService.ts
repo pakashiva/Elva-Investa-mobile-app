@@ -10,6 +10,7 @@ export type WithdrawalRow = {
   status: WithdrawalStatus;
   withdrawal_amount: number;
   strategy: 'full' | 'partial';
+  code?: string | null;
   requested_on: string;
   net_payout: number | null;
   status_date: string;
@@ -81,10 +82,11 @@ function mapWithdrawalRow(row: WithdrawalRow): WithdrawalRequest {
   const fundName = row.investments?.name ?? 'Investment';
   const netPayout =
     row.net_payout != null ? formatInr(Number(row.net_payout)) : '—';
+  const requestCode = row.code?.trim() || row.id.slice(0, 8).toUpperCase();
 
   return {
     id: row.id,
-    investmentCode,
+    investmentCode: `${requestCode} · ${investmentCode}`,
     fundName,
     status: row.status,
     requestedAmount: formatInr(Number(row.withdrawal_amount)),

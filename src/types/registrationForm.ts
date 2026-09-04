@@ -16,10 +16,7 @@ export type RegistrationFormValues = {
   state: string;
   pinCode: string;
   aadhaarNumber: string;
-  aadhaarFront: DocumentUploadValue;
-  aadhaarBack: DocumentUploadValue;
   panNumber: string;
-  panCard: DocumentUploadValue;
   accountHolderName: string;
   accountNumber: string;
   confirmAccountNumber: string;

@@ -14,7 +14,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AccountTypeSelector from '../../components/bank/AccountTypeSelector';
-import DocumentUploadField from '../../components/registration/DocumentUploadField';
 import RegistrationDateField from '../../components/registration/RegistrationDateField';
 import RegistrationSectionHeader from '../../components/registration/RegistrationSectionHeader';
 import RegistrationTextField from '../../components/registration/RegistrationTextField';
@@ -32,21 +31,15 @@ import { registerUser } from '../../services/registrationService';
 import { useAuth } from '../../contexts/AuthContext';
 import { detectBankNameFromIfsc } from '../../utils/bankName';
 import { RootStackScreenProps } from '../../navigation/types';
-import {
-  DocumentUploadValue,
-  RegistrationFormErrors,
-} from '../../types/registrationForm';
+import { RegistrationFormErrors } from '../../types/registrationForm';
 import { authColors } from '../../theme/authColors';
 import { colors, spacing } from '../../theme/colors';
-import { pickDocumentImage } from '../../utils/pickImage';
 import {
   hasFormErrors,
   validateRegistrationForm,
 } from '../../utils/validateRegistrationForm';
 
 type Props = RootStackScreenProps<'CreateAccount'>;
-
-type UploadKey = 'aadhaarFront' | 'aadhaarBack' | 'panCard';
 
 export default function CreateAccountScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
@@ -58,7 +51,6 @@ export default function CreateAccountScreen({ navigation }: Props) {
   } = useAuth();
   const [form, setForm] = useState(REGISTRATION_FORM_DEFAULTS);
   const [errors, setErrors] = useState<RegistrationFormErrors>({});
-  const [uploadingKey, setUploadingKey] = useState<UploadKey | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const updateField = <K extends keyof typeof form>(
@@ -73,24 +65,6 @@ export default function CreateAccountScreen({ navigation }: Props) {
         return next;
       });
     }
-  };
-
-  const handleDocumentUpload = async (key: UploadKey) => {
-    setUploadingKey(key);
-    const picked = await pickDocumentImage();
-    setUploadingKey(null);
-
-    if (!picked) {
-      return;
-    }
-
-    const nextValue: DocumentUploadValue = {
-      uri: picked.uri,
-      fileName: picked.fileName,
-      isUserSelected: true,
-    };
-
-    updateField(key, nextValue);
   };
 
   const handleSubmit = async () => {
@@ -249,7 +223,7 @@ export default function CreateAccountScreen({ navigation }: Props) {
           <RegistrationSectionHeader
             number={2}
             title="KYC Documents Verification"
-            description="For compliance and taxation laws"
+            description="Enter Aadhaar and PAN numbers for compliance"
           />
 
           <RegistrationTextField
@@ -261,25 +235,6 @@ export default function CreateAccountScreen({ navigation }: Props) {
             keyboardType="number-pad"
           />
 
-          <View style={styles.uploadRow}>
-            <DocumentUploadField
-              label="Upload Aadhaar Front"
-              value={form.aadhaarFront}
-              onPress={() => handleDocumentUpload('aadhaarFront')}
-              loading={uploadingKey === 'aadhaarFront'}
-              error={errors.aadhaarFront}
-              compact
-            />
-            <DocumentUploadField
-              label="Upload Aadhaar Back"
-              value={form.aadhaarBack}
-              onPress={() => handleDocumentUpload('aadhaarBack')}
-              loading={uploadingKey === 'aadhaarBack'}
-              error={errors.aadhaarBack}
-              compact
-            />
-          </View>
-
           <RegistrationTextField
             label="PAN Card Number"
             required
@@ -287,14 +242,6 @@ export default function CreateAccountScreen({ navigation }: Props) {
             onChangeText={(text) => updateField('panNumber', text.toUpperCase())}
             error={errors.panNumber}
             autoCapitalize="characters"
-          />
-
-          <DocumentUploadField
-            label="Upload PAN Card"
-            value={form.panCard}
-            onPress={() => handleDocumentUpload('panCard')}
-            loading={uploadingKey === 'panCard'}
-            error={errors.panCard}
           />
 
           <RegistrationSectionHeader
@@ -545,11 +492,6 @@ const styles = StyleSheet.create({
   },
   half: {
     flex: 1,
-  },
-  uploadRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 16,
   },
   fieldError: {
     marginTop: -10,

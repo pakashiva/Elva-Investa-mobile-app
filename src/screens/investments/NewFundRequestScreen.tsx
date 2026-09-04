@@ -57,6 +57,7 @@ export default function NewFundRequestScreen({ navigation }: Props) {
   const autoPaydate = useMemo(() => getAutoSelectedPaydate(), []);
 
   const [fundAmount, setFundAmount] = useState('');
+  const [fundTitle, setFundTitle] = useState('');
   const [bankAccountId, setBankAccountId] = useState<string | null>(null);
   const [nomineeId, setNomineeId] = useState<string | null>(null);
   const [hasReferralCode, setHasReferralCode] = useState(false);
@@ -127,6 +128,12 @@ export default function NewFundRequestScreen({ navigation }: Props) {
       return;
     }
 
+    const title = fundTitle.trim();
+    if (!title) {
+      Alert.alert('Title required', 'Please enter a title for this fund.');
+      return;
+    }
+
     const amount = parseInrInput(fundAmount);
     const amountError = validateFundAmount(amount);
     if (amountError) {
@@ -192,6 +199,7 @@ export default function NewFundRequestScreen({ navigation }: Props) {
 
       await createFundRequest({
         userId,
+        title,
         fundAmount: amount,
         bankAccountId,
         nomineeId,
@@ -252,6 +260,16 @@ export default function NewFundRequestScreen({ navigation }: Props) {
           ) : null}
 
           <FormSectionHeader icon="wallet-outline" title="FUND DETAILS" />
+
+          <FormTextField
+            label="Title"
+            required
+            placeholder="e.g. Family Growth Fund"
+            hint="This name will appear on your investments list"
+            value={fundTitle}
+            onChangeText={setFundTitle}
+            autoCapitalize="words"
+          />
 
           <FormTextField
             label="Fund Amount (in ₹)"

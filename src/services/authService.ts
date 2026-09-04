@@ -9,7 +9,7 @@ function formatAuthError(message: string): string {
   const lower = message.toLowerCase();
 
   if (lower.includes('invalid login credentials')) {
-    return 'Invalid email or password. Please try again.';
+    return 'Invalid mobile/email or password. Please try again.';
   }
   if (lower.includes('email not confirmed')) {
     return 'Please confirm your email before signing in.';
@@ -28,6 +28,37 @@ function formatAuthError(message: string): string {
     );
   }
   return message;
+}
+
+function looksLikeEmail(value: string): boolean {
+  return value.includes('@');
+}
+
+export async function resolveLoginEmail(mobileOrEmail: string): Promise<string> {
+  const trimmed = mobileOrEmail.trim();
+  if (!trimmed) {
+    throw new Error('Please enter your mobile number or email address.');
+  }
+
+  if (looksLikeEmail(trimmed)) {
+    return trimmed.toLowerCase();
+  }
+
+  const { data, error } = await supabase.rpc('get_login_email_by_mobile', {
+    p_mobile: trimmed,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (!data || typeof data !== 'string') {
+    throw new Error(
+      'No account found for this mobile number. Try your email address instead.'
+    );
+  }
+
+  return data.trim().toLowerCase();
 }
 
 export async function signUpWithEmail(
@@ -80,6 +111,14 @@ export async function signInWithEmail(
   }
 
   return { session: data.session };
+}
+
+export async function signInWithMobileOrEmail(
+  mobileOrEmail: string,
+  password: string
+): Promise<AuthResult> {
+  const email = await resolveLoginEmail(mobileOrEmail);
+  return signInWithEmail(email, password);
 }
 
 export async function signOut(): Promise<void> {

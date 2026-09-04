@@ -43,15 +43,29 @@ export type Database = {
         Update: Partial<Database['public']['Tables']['profiles']['Insert']>;
         Relationships: [];
       };
+      customers: {
+        Row: {
+          user_id: string;
+          customer_id: string;
+          created_at: string;
+        };
+        Insert: {
+          user_id: string;
+          customer_id?: string;
+          created_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['customers']['Insert']>;
+        Relationships: [];
+      };
       kyc_documents: {
         Row: {
           id: string;
           user_id: string;
           aadhaar_number: string;
           pan_number: string;
-          aadhaar_front_path: string;
-          aadhaar_back_path: string;
-          pan_card_path: string;
+          aadhaar_front_path: string | null;
+          aadhaar_back_path: string | null;
+          pan_card_path: string | null;
           created_at: string;
         };
         Insert: {
@@ -59,9 +73,9 @@ export type Database = {
           user_id: string;
           aadhaar_number: string;
           pan_number: string;
-          aadhaar_front_path: string;
-          aadhaar_back_path: string;
-          pan_card_path: string;
+          aadhaar_front_path?: string | null;
+          aadhaar_back_path?: string | null;
+          pan_card_path?: string | null;
           created_at?: string;
         };
         Update: Partial<Database['public']['Tables']['kyc_documents']['Insert']>;
@@ -199,6 +213,7 @@ export type Database = {
           status: string;
           withdrawal_amount: number;
           strategy: string;
+          code: string;
           requested_on: string;
           net_payout: number | null;
           status_date: string;
@@ -213,6 +228,7 @@ export type Database = {
           status?: string;
           withdrawal_amount: number;
           strategy?: string;
+          code?: string;
           requested_on?: string;
           net_payout?: number | null;
           status_date?: string;
@@ -355,6 +371,14 @@ export type Database = {
       get_recovery_mobile_by_email: {
         Args: { p_email: string };
         Returns: string;
+      };
+      get_login_email_by_mobile: {
+        Args: { p_mobile: string };
+        Returns: string;
+      };
+      is_email_mobile_combo_available: {
+        Args: { p_email: string; p_mobile: string };
+        Returns: boolean;
       };
       mark_mobile_verified: {
         Args: Record<string, never>;

@@ -1,5 +1,8 @@
 import { supabase } from '../lib/supabase';
-import { isMissingTableError } from '../utils/supabaseErrors';
+import {
+  isJwtClockSkewError,
+  isMissingTableError,
+} from '../utils/supabaseErrors';
 
 let processingPromise: Promise<void> | null = null;
 let lastProcessedUserId: string | null = null;
@@ -26,6 +29,12 @@ export async function processUserInvestmentInterest(
         }
         throw new Error(error.message);
       }
+    } catch (error) {
+      // Allow immediate retries after JWT clock-skew failures right after login.
+      if (isJwtClockSkewError(error)) {
+        lastProcessedUserId = null;
+      }
+      throw error;
     } finally {
       processingPromise = null;
     }

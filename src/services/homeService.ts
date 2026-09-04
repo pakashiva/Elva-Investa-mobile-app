@@ -1,6 +1,9 @@
 import { supabase } from '../lib/supabase';
 import { processUserInvestmentInterest } from './investmentInterestService';
-import { isMissingTableError } from '../utils/supabaseErrors';
+import {
+  isMissingTableError,
+  withJwtRetry,
+} from '../utils/supabaseErrors';
 
 export type HomeSummary = {
   totalInvested: number;
@@ -54,7 +57,7 @@ function calculateHomeSummary(
   };
 }
 
-export async function getHomeSummary(userId: string): Promise<HomeSummary> {
+async function fetchHomeSummary(userId: string): Promise<HomeSummary> {
   await processUserInvestmentInterest(userId);
 
   const [investmentsResult, withdrawalsResult] = await Promise.all([
@@ -88,6 +91,10 @@ export async function getHomeSummary(userId: string): Promise<HomeSummary> {
     investmentsResult.data ?? [],
     withdrawalsResult.data ?? []
   );
+}
+
+export async function getHomeSummary(userId: string): Promise<HomeSummary> {
+  return withJwtRetry(() => fetchHomeSummary(userId));
 }
 
 /** Exported for unit tests */

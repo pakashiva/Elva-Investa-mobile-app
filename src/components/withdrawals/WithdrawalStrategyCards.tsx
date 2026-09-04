@@ -59,7 +59,7 @@ export default function WithdrawalStrategyCards({
           <Text
             style={[styles.cardDesc, disablePartial && styles.cardDescDisabled]}
           >
-            Minimum ₹1L balance required.
+            Withdraw any portion of principal.
           </Text>
         </TouchableOpacity>
       </View>

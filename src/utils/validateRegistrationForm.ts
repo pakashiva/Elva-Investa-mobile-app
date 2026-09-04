@@ -24,16 +24,7 @@ export function validateRegistrationForm(
   if (isEmpty(values.aadhaarNumber)) {
     errors.aadhaarNumber = 'Aadhaar card number is required';
   }
-  if (!values.aadhaarFront.isUserSelected || !values.aadhaarFront.uri) {
-    errors.aadhaarFront = 'Please upload your Aadhaar front image';
-  }
-  if (!values.aadhaarBack.isUserSelected || !values.aadhaarBack.uri) {
-    errors.aadhaarBack = 'Please upload your Aadhaar back image';
-  }
   if (isEmpty(values.panNumber)) errors.panNumber = 'PAN card number is required';
-  if (!values.panCard.isUserSelected || !values.panCard.uri) {
-    errors.panCard = 'Please upload your PAN card image';
-  }
 
   if (isEmpty(values.accountHolderName)) {
     errors.accountHolderName = 'Account holder name is required';

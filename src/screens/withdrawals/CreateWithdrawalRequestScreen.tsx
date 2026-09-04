@@ -45,6 +45,9 @@ type FundOption = {
   label: string;
   principal: number;
   withdrawalAmount: number;
+  openPartialAmount: number;
+  availablePrincipal: number;
+  hasOpenFullWithdrawal: boolean;
 };
 
 type Props = WithdrawalsStackScreenProps<'CreateWithdrawalRequest'>;
@@ -87,16 +90,18 @@ export default function CreateWithdrawalRequestScreen({ navigation }: Props) {
     if (!selectedFund || !isPartial) {
       return null;
     }
-    const maxWithdrawable = selectedFund.principal - 100000;
-    return `Withdraw from principal. Max ₹${maxWithdrawable.toLocaleString('en-IN')} (min ₹1,00,000 balance).`;
+    if (selectedFund.openPartialAmount > 0) {
+      return `Open partial requests: ₹${selectedFund.openPartialAmount.toLocaleString('en-IN')}. Available now: ₹${selectedFund.availablePrincipal.toLocaleString('en-IN')}.`;
+    }
+    return `Withdraw from principal. Max ₹${selectedFund.availablePrincipal.toLocaleString('en-IN')}. Use Full Withdrawal to exit completely.`;
   }, [isPartial, selectedFund]);
 
   const handleFundChange = (nextFundId: string | null) => {
     setFundId(nextFundId);
     setPartialAmountInput('');
     const fund = fundOptions.find((item) => item.id === nextFundId);
-    if (fund && fund.principal <= 100000) {
-      setStrategy('full');
+    if (fund && fund.openPartialAmount > 0) {
+      setStrategy('partial');
     }
   };
 
@@ -104,8 +109,19 @@ export default function CreateWithdrawalRequestScreen({ navigation }: Props) {
     if (
       nextStrategy === 'partial' &&
       selectedFund &&
-      selectedFund.principal <= 100000
+      selectedFund.availablePrincipal <= 0
     ) {
+      return;
+    }
+    if (
+      nextStrategy === 'full' &&
+      selectedFund &&
+      selectedFund.openPartialAmount > 0
+    ) {
+      Alert.alert(
+        'Partial request open',
+        'A partial withdrawal is already in process for this fund. You can only request the remaining principal until that request is resolved.'
+      );
       return;
     }
     setStrategy(nextStrategy);
@@ -142,6 +158,9 @@ export default function CreateWithdrawalRequestScreen({ navigation }: Props) {
             label: fund.label,
             principal: fund.principal,
             withdrawalAmount: fund.withdrawalAmount,
+            openPartialAmount: fund.openPartialAmount,
+            availablePrincipal: fund.availablePrincipal,
+            hasOpenFullWithdrawal: fund.hasOpenFullWithdrawal,
           }))
         );
       } catch (fundError) {
@@ -224,18 +243,34 @@ export default function CreateWithdrawalRequestScreen({ navigation }: Props) {
         return;
       }
 
+      if (activeInvestment.hasOpenFullWithdrawal) {
+        Alert.alert(
+          'Withdrawal already requested',
+          'A full withdrawal is already open for this fund. You can request again only if that request is rejected.'
+        );
+        return;
+      }
+
       let withdrawalAmount: number;
       if (strategy === 'partial') {
         withdrawalAmount = parseInrInput(partialAmountInput);
         const validationError = validatePartialWithdrawalAmount(
           activeInvestment.principal,
-          withdrawalAmount
+          withdrawalAmount,
+          activeInvestment.openPartialAmount
         );
         if (validationError) {
           Alert.alert('Invalid amount', validationError);
           return;
         }
       } else {
+        if (activeInvestment.openPartialAmount > 0) {
+          Alert.alert(
+            'Partial request open',
+            'Finish or wait for open partial withdrawals before requesting a full withdrawal.'
+          );
+          return;
+        }
         withdrawalAmount = activeInvestment.withdrawalAmount;
       }
 
@@ -333,7 +368,7 @@ export default function CreateWithdrawalRequestScreen({ navigation }: Props) {
             value={strategy}
             onChange={handleStrategyChange}
             disablePartial={
-              !selectedFund || selectedFund.principal <= 100000
+              !selectedFund || selectedFund.availablePrincipal <= 0
             }
           />
 
@@ -379,8 +414,8 @@ export default function CreateWithdrawalRequestScreen({ navigation }: Props) {
             <Text style={styles.termsText}>
               I agree to the{' '}
               <Text style={styles.termsLink}>Terms and Conditions</Text>. I
-              understand that full withdrawals will close my account and partial
-              withdrawals require maintaining a minimum balance of ₹1,00,000.
+              understand that full withdrawals will close my account. Partial
+              withdrawals reduce the invested principal for future earnings.
             </Text>
           </TouchableOpacity>
 

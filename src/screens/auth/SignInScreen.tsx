@@ -17,7 +17,7 @@ import { BRAND_NAME, BRAND_TAGLINE } from '../../constants/brandAssets';
 import SignInTextField from '../../components/auth/SignInTextField';
 import { SIGN_IN_DEFAULTS } from '../../data/auth';
 import { useAuth } from '../../contexts/AuthContext';
-import { signInWithEmail } from '../../services/authService';
+import { signInWithMobileOrEmail, resolveLoginEmail } from '../../services/authService';
 import { RootStackScreenProps } from '../../navigation/types';
 import { authColors } from '../../theme/authColors';
 
@@ -35,12 +35,7 @@ export default function SignInScreen({ navigation }: Props) {
 
   const handleSignIn = async () => {
     if (!mobileOrEmail.trim() || !password) {
-      setErrorMessage('Please enter your email and password.');
-      return;
-    }
-
-    if (!mobileOrEmail.includes('@')) {
-      setErrorMessage('Please sign in using your registered email address.');
+      setErrorMessage('Please enter your mobile number or email, and password.');
       return;
     }
 
@@ -50,7 +45,7 @@ export default function SignInScreen({ navigation }: Props) {
     clearOtpFlow();
 
     try {
-      await signInWithEmail(mobileOrEmail, password);
+      await signInWithMobileOrEmail(mobileOrEmail, password);
       navigation.reset({
         index: 0,
         routes: [{ name: 'MainTabs' }],
@@ -65,26 +60,31 @@ export default function SignInScreen({ navigation }: Props) {
     }
   };
 
-  const handleForgotPassword = () => {
-    const email = mobileOrEmail.trim().toLowerCase();
+  const handleForgotPassword = async () => {
+    const input = mobileOrEmail.trim();
 
-    if (!email) {
-      setErrorMessage('Enter your registered email address first.');
-      return;
-    }
-
-    if (!email.includes('@')) {
-      setErrorMessage('Please enter your registered email address.');
+    if (!input) {
+      setErrorMessage('Enter your registered mobile number or email first.');
       return;
     }
 
     setErrorMessage(null);
     clearOtpFlow();
-    navigation.navigate('VerifyMobileNumber', {
-      mode: 'forgotPassword',
-      email,
-      sendOtp: true,
-    });
+
+    try {
+      const email = await resolveLoginEmail(input);
+      navigation.navigate('VerifyMobileNumber', {
+        mode: 'forgotPassword',
+        email,
+        sendOtp: true,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Unable to start password recovery.';
+      setErrorMessage(message);
+    }
   };
 
   return (
