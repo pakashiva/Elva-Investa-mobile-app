@@ -29,6 +29,7 @@ import {
 } from '../../services/bankAccountService';
 import {
   createFundRequest,
+  getUserInvestmentTitles,
   validateFundAmount,
 } from '../../services/investmentService';
 import {
@@ -44,6 +45,10 @@ import { AddFundsStackScreenProps } from '../../navigation/types';
 import { parseDisplayPaydate } from '../../utils/parsePaydate';
 import { parseInrInput } from '../../utils/currency';
 import {
+  isInvestmentTitleTaken,
+  suggestNextInvestmentTitle,
+} from '../../utils/fundTitle';
+import {
   isMissingTableError,
   MISSING_INVESTMENTS_TABLE_MESSAGE,
 } from '../../utils/supabaseErrors';
@@ -57,7 +62,8 @@ export default function NewFundRequestScreen({ navigation }: Props) {
   const autoPaydate = useMemo(() => getAutoSelectedPaydate(), []);
 
   const [fundAmount, setFundAmount] = useState('');
-  const [fundTitle, setFundTitle] = useState('');
+  const [fundTitle, setFundTitle] = useState('Investment 1');
+  const [existingTitles, setExistingTitles] = useState<string[]>([]);
   const [bankAccountId, setBankAccountId] = useState<string | null>(null);
   const [nomineeId, setNomineeId] = useState<string | null>(null);
   const [hasReferralCode, setHasReferralCode] = useState(false);
@@ -78,6 +84,8 @@ export default function NewFundRequestScreen({ navigation }: Props) {
     if (!userId) {
       setBankAccounts([]);
       setNominees([]);
+      setExistingTitles([]);
+      setFundTitle('Investment 1');
       setIsLoadingOptions(false);
       return;
     }
@@ -85,12 +93,15 @@ export default function NewFundRequestScreen({ navigation }: Props) {
     setIsLoadingOptions(true);
 
     try {
-      const [accounts, nomineeList] = await Promise.all([
+      const [accounts, nomineeList, titles] = await Promise.all([
         getUserBankAccounts(userId),
         getUserNominees(userId),
+        getUserInvestmentTitles(userId),
       ]);
       setBankAccounts(accounts);
       setNominees(nomineeList);
+      setExistingTitles(titles);
+      setFundTitle(suggestNextInvestmentTitle(titles));
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Failed to load form data.';
@@ -131,6 +142,14 @@ export default function NewFundRequestScreen({ navigation }: Props) {
     const title = fundTitle.trim();
     if (!title) {
       Alert.alert('Title required', 'Please enter a title for this fund.');
+      return;
+    }
+
+    if (isInvestmentTitleTaken(title, existingTitles)) {
+      Alert.alert(
+        'Title already used',
+        'Please choose a different fund title. Each investment name must be unique.'
+      );
       return;
     }
 
@@ -264,8 +283,8 @@ export default function NewFundRequestScreen({ navigation }: Props) {
           <FormTextField
             label="Title"
             required
-            placeholder="e.g. Family Growth Fund"
-            hint="This name will appear on your investments list"
+            placeholder="Investment 1"
+            hint="Default is Investment 1, 2, 3… You can rename it. Titles must be unique."
             value={fundTitle}
             onChangeText={setFundTitle}
             autoCapitalize="words"
@@ -293,6 +312,10 @@ export default function NewFundRequestScreen({ navigation }: Props) {
             onChange={() => {}}
             editable={false}
           />
+          <Text style={styles.paydateHint}>
+            Auto-set to one month from today. If that day does not exist next
+            month, payout moves to the 1st of the following month.
+          </Text>
 
           <FormSelectField
             label="Source Bank Account"
@@ -433,6 +456,13 @@ const styles = StyleSheet.create({
   loadingWrap: {
     alignItems: 'center',
     marginBottom: 8,
+  },
+  paydateHint: {
+    marginTop: -8,
+    marginBottom: 14,
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.textSecondary,
   },
   actions: {
     flexDirection: 'row',

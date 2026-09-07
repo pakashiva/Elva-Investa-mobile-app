@@ -3,22 +3,25 @@ import {
   View,
   StyleSheet,
   TouchableOpacity,
-  Image,
   ImageSourcePropType,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import ProfileAvatar from './ProfileAvatar';
+import { DEFAULT_PROFILE_AVATAR } from '../constants/brandAssets';
 import { colors } from '../theme/colors';
 
 type Props = {
-  avatarSource: ImageSourcePropType;
+  avatarSource?: ImageSourcePropType;
   onBellPress?: () => void;
   onProfilePress?: () => void;
+  showBadge?: boolean;
 };
 
 export default function HeaderActions({
-  avatarSource,
+  avatarSource = DEFAULT_PROFILE_AVATAR,
   onBellPress,
   onProfilePress,
+  showBadge = false,
 }: Props) {
   return (
     <View style={styles.row}>
@@ -28,16 +31,14 @@ export default function HeaderActions({
         onPress={onBellPress}
       >
         <Ionicons name="notifications-outline" size={22} color={colors.textPrimary} />
-        <View style={styles.badge} />
+        {showBadge ? <View style={styles.badge} /> : null}
       </TouchableOpacity>
-      <TouchableOpacity
-        style={styles.profileRow}
-        activeOpacity={0.7}
+      <ProfileAvatar
+        source={avatarSource}
+        size={40}
+        showChevron
         onPress={onProfilePress}
-      >
-        <Image source={avatarSource} style={styles.avatar} resizeMode="contain" />
-        <Ionicons name="chevron-down" size={16} color="#5A6577" />
-      </TouchableOpacity>
+      />
     </View>
   );
 }
@@ -68,18 +69,5 @@ const styles = StyleSheet.create({
     backgroundColor: colors.danger,
     borderWidth: 1.5,
     borderColor: '#FFFFFF',
-  },
-  profileRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
   },
 });

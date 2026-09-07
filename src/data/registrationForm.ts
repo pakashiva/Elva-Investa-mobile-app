@@ -31,7 +31,6 @@ export const REGISTRATION_FORM_DEFAULTS: RegistrationFormValues = {
   nomineeName: '',
   relationship: '',
   nomineeAadhaar: '',
-  nomineePercentage: '',
   password: '',
   confirmPassword: '',
   authorized: false,

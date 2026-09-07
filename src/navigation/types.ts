@@ -24,6 +24,7 @@ export type MoreStackParamList = {
   ReferEarn: undefined;
   MyProfile: undefined;
   Settings: undefined;
+  LegalDocument: { documentId: 'terms' | 'privacy' | 'about' };
   Transactions: undefined;
   FAQ: undefined;
   HelpSupport: undefined;
@@ -42,6 +43,7 @@ export type RootStackParamList = {
   CreateAccount: undefined;
   VerifyMobileNumber: VerifyMobileNumberParams;
   MainTabs: NavigatorScreenParams<MainTabParamList>;
+  Notifications: undefined;
 };
 
 export type RootStackScreenProps<T extends keyof RootStackParamList> =

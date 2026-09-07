@@ -5,7 +5,6 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  Image,
   TextInput,
   ActivityIndicator,
 } from 'react-native';
@@ -13,22 +12,24 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import TransactionCard from '../../components/TransactionCard';
+import ProfileAvatar from '../../components/ProfileAvatar';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNotificationBell } from '../../hooks/useNotificationBell';
 import { getUserTransactions } from '../../services/transactionService';
 import { Transaction } from '../../types/transaction';
 import { isMissingTableError } from '../../utils/supabaseErrors';
 import { MoreStackScreenProps } from '../../navigation/types';
 import { colors, spacing } from '../../theme/colors';
+import { DEFAULT_PROFILE_AVATAR } from '../../constants/brandAssets';
 
-import { BRAND_LOGO_MARK } from '../../constants/brandAssets';
-
-const avatarSource = BRAND_LOGO_MARK;
+const avatarSource = DEFAULT_PROFILE_AVATAR;
 
 type Props = MoreStackScreenProps<'Transactions'>;
 
 export default function TransactionsScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const { session } = useAuth();
+  const { hasUnread, openNotifications } = useNotificationBell();
   const [searchQuery, setSearchQuery] = useState('');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -96,22 +97,19 @@ export default function TransactionsScreen({ navigation }: Props) {
         </View>
 
         <View style={styles.headerActions}>
-          <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
+          <TouchableOpacity
+            style={styles.bellBtn}
+            activeOpacity={0.7}
+            onPress={openNotifications}
+          >
             <Ionicons
               name="notifications-outline"
               size={20}
               color={colors.textPrimary}
             />
-            <View style={styles.notifBadge} />
+            {hasUnread ? <View style={styles.notifBadge} /> : null}
           </TouchableOpacity>
-          <TouchableOpacity style={styles.profileRow} activeOpacity={0.7}>
-            <Image
-              source={avatarSource}
-              style={styles.avatar}
-              resizeMode="contain"
-            />
-            <Ionicons name="chevron-down" size={14} color="#5A6577" />
-          </TouchableOpacity>
+          <ProfileAvatar source={avatarSource} size={36} showChevron />
         </View>
       </View>
 

@@ -9,6 +9,7 @@ import SettingsScreen from '../screens/more/SettingsScreen';
 import TransactionsScreen from '../screens/more/TransactionsScreen';
 import FaqScreen from '../screens/more/FaqScreen';
 import HelpSupportScreen from '../screens/more/HelpSupportScreen';
+import LegalDocumentScreen from '../screens/more/LegalDocumentScreen';
 import { MoreStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<MoreStackParamList>();
@@ -40,6 +41,11 @@ export default function MoreStackNavigator() {
       <Stack.Screen
         name="Settings"
         component={SettingsScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="LegalDocument"
+        component={LegalDocumentScreen}
         options={{ animation: 'slide_from_right' }}
       />
       <Stack.Screen

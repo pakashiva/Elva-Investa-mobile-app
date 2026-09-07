@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Image,
   Dimensions,
   ActivityIndicator,
 } from 'react-native';
@@ -16,28 +15,39 @@ import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import PerformanceChart from '../../components/PerformanceChart';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNotificationBell } from '../../hooks/useNotificationBell';
 import { getProfileFullName } from '../../services/profileService';
 import {
   EMPTY_HOME_SUMMARY,
   getHomeSummary,
   HomeSummary,
 } from '../../services/homeService';
+import {
+  EMPTY_SERIES,
+  getPerformanceSeries,
+  PerformanceSeries,
+} from '../../services/performanceService';
 import { formatInr } from '../../utils/currency';
 import {
   formatGainFooter,
   formatInvestmentCountFooter,
   formatPaidWithdrawalFooter,
 } from '../../utils/homeFormat';
-import { isJwtClockSkewError, isMissingTableError, withJwtRetry } from '../../utils/supabaseErrors';
+import {
+  isJwtClockSkewError,
+  isMissingTableError,
+  withJwtRetry,
+} from '../../utils/supabaseErrors';
 import { MainTabParamList } from '../../navigation/types';
 import { colors, spacing } from '../../theme/colors';
-import { BRAND_LOGO_MARK } from '../../constants/brandAssets';
+import { DEFAULT_PROFILE_AVATAR } from '../../constants/brandAssets';
+import ProfileAvatar from '../../components/ProfileAvatar';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const H_PAD = spacing.screen;
 const CARD_GAP = 12;
 const CARD_WIDTH = (SCREEN_WIDTH - H_PAD * 2 - CARD_GAP) / 2;
-const avatarSource = BRAND_LOGO_MARK;
+const avatarSource = DEFAULT_PROFILE_AVATAR;
 
 type HomeNav = BottomTabNavigationProp<MainTabParamList, 'Home'>;
 
@@ -138,11 +148,15 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<HomeNav>();
   const { session } = useAuth();
+  const { hasUnread, openNotifications } = useNotificationBell();
   const [range, setRange] = useState<'1Y' | 'ALL'>('1Y');
   const [displayName, setDisplayName] = useState('there');
   const [summary, setSummary] = useState<HomeSummary>(EMPTY_HOME_SUMMARY);
   const [isSummaryLoading, setIsSummaryLoading] = useState(true);
   const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [performance, setPerformance] =
+    useState<PerformanceSeries>(EMPTY_SERIES);
+  const [isPerformanceLoading, setIsPerformanceLoading] = useState(true);
 
   useEffect(() => {
     let mounted = true;
@@ -192,10 +206,11 @@ export default function HomeScreen() {
         setSummary(EMPTY_HOME_SUMMARY);
         return;
       }
-      // Clock skew is transient; keep the screen usable instead of a red banner.
       if (isJwtClockSkewError(error)) {
         setSummary(EMPTY_HOME_SUMMARY);
-        console.warn('Home summary delayed by JWT clock skew; will refresh on next focus.');
+        console.warn(
+          'Home summary delayed by JWT clock skew; will refresh on next focus.'
+        );
         return;
       }
       const message =
@@ -207,10 +222,38 @@ export default function HomeScreen() {
     }
   }, [session?.user?.id]);
 
+  const loadPerformance = useCallback(async () => {
+    const userId = session?.user?.id;
+    if (!userId) {
+      setPerformance(EMPTY_SERIES);
+      setIsPerformanceLoading(false);
+      return;
+    }
+
+    setIsPerformanceLoading(true);
+    try {
+      const series = await getPerformanceSeries(userId, range);
+      setPerformance(series);
+    } catch (error) {
+      if (isMissingTableError(error) || isJwtClockSkewError(error)) {
+        setPerformance(EMPTY_SERIES);
+        return;
+      }
+      console.warn(
+        'Performance series error:',
+        error instanceof Error ? error.message : error
+      );
+      setPerformance(EMPTY_SERIES);
+    } finally {
+      setIsPerformanceLoading(false);
+    }
+  }, [session?.user?.id, range]);
+
   useFocusEffect(
     useCallback(() => {
       loadHomeSummary();
-    }, [loadHomeSummary])
+      loadPerformance();
+    }, [loadHomeSummary, loadPerformance])
   );
 
   const summaryCards = useMemo(
@@ -220,6 +263,10 @@ export default function HomeScreen() {
 
   const handleInvestNow = () => {
     navigation.navigate('AddFunds', { screen: 'NewFundRequest' });
+  };
+
+  const handleOpenProfile = () => {
+    navigation.navigate('More', { screen: 'MyProfile' });
   };
 
   return (
@@ -239,22 +286,24 @@ export default function HomeScreen() {
             </Text>
           </View>
           <View style={styles.headerActions}>
-            <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
+            <TouchableOpacity
+              style={styles.bellBtn}
+              activeOpacity={0.7}
+              onPress={openNotifications}
+            >
               <Ionicons
                 name="notifications-outline"
                 size={22}
                 color={colors.textPrimary}
               />
-              <View style={styles.badge} />
+              {hasUnread ? <View style={styles.badge} /> : null}
             </TouchableOpacity>
-            <TouchableOpacity style={styles.profileRow} activeOpacity={0.7}>
-              <Image
-                source={avatarSource}
-                style={styles.avatar}
-                resizeMode="contain"
-              />
-              <Ionicons name="chevron-down" size={16} color="#5A6577" />
-            </TouchableOpacity>
+            <ProfileAvatar
+              source={avatarSource}
+              size={40}
+              showChevron
+              onPress={handleOpenProfile}
+            />
           </View>
         </View>
 
@@ -327,16 +376,28 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          <PerformanceChart range={range} />
+          {isPerformanceLoading ? (
+            <ActivityIndicator
+              size="small"
+              color={colors.primarySoft}
+              style={styles.chartLoader}
+            />
+          ) : (
+            <PerformanceChart points={performance.points} />
+          )}
 
           <View style={styles.statRows}>
             <View style={styles.statRow}>
               <Text style={styles.statLabel}>Best Performer</Text>
-              <Text style={styles.statValue}>Growth Plus (5% p.a.)</Text>
+              <Text style={styles.statValue} numberOfLines={1}>
+                {isPerformanceLoading ? '—' : performance.bestPerformerLabel}
+              </Text>
             </View>
             <View style={[styles.statRow, styles.statRowLast]}>
               <Text style={styles.statLabel}>Average Return</Text>
-              <Text style={styles.statValue}>11.2% CAGR</Text>
+              <Text style={styles.statValue}>
+                {isPerformanceLoading ? '—' : performance.averageReturnLabel}
+              </Text>
             </View>
           </View>
         </View>
@@ -435,19 +496,6 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: '#FFFFFF',
   },
-  profileRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: colors.borderStrong,
-  },
   errorText: {
     fontSize: 13,
     color: colors.danger,
@@ -495,6 +543,9 @@ const styles = StyleSheet.create({
   summaryLoader: {
     alignSelf: 'flex-start',
     marginBottom: 4,
+  },
+  chartLoader: {
+    marginVertical: 48,
   },
   summaryValue: {
     fontSize: 20,
@@ -569,6 +620,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     marginBottom: 8,
+    gap: 12,
   },
   statRowLast: {
     marginBottom: 8,
@@ -579,9 +631,11 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   statValue: {
+    flexShrink: 1,
     fontSize: 13,
     color: colors.textPrimary,
     fontWeight: '700',
+    textAlign: 'right',
   },
   promoBanner: {
     borderRadius: 14,

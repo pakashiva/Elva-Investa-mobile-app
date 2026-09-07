@@ -2,6 +2,14 @@ import {
   RegistrationFormErrors,
   RegistrationFormValues,
 } from '../types/registrationForm';
+import {
+  validateAadhaarNumber,
+  validateBankAccountNumber,
+  validateEmailAddress,
+  validateIfscCode,
+  validateIndianMobile,
+  validatePanNumber,
+} from './indianValidators';
 
 function isEmpty(value: string): boolean {
   return !value.trim();
@@ -13,8 +21,21 @@ export function validateRegistrationForm(
   const errors: RegistrationFormErrors = {};
 
   if (isEmpty(values.fullName)) errors.fullName = 'Full name is required';
-  if (isEmpty(values.mobileNumber)) errors.mobileNumber = 'Mobile number is required';
-  if (isEmpty(values.emailAddress)) errors.emailAddress = 'Email address is required';
+
+  if (isEmpty(values.mobileNumber)) {
+    errors.mobileNumber = 'Mobile number is required';
+  } else {
+    const mobileError = validateIndianMobile(values.mobileNumber);
+    if (mobileError) errors.mobileNumber = mobileError;
+  }
+
+  if (isEmpty(values.emailAddress)) {
+    errors.emailAddress = 'Email address is required';
+  } else {
+    const emailError = validateEmailAddress(values.emailAddress);
+    if (emailError) errors.emailAddress = emailError;
+  }
+
   if (isEmpty(values.dateOfBirth)) errors.dateOfBirth = 'Date of birth is required';
   if (isEmpty(values.address)) errors.address = 'Address is required';
   if (isEmpty(values.city)) errors.city = 'City is required';
@@ -23,28 +44,52 @@ export function validateRegistrationForm(
 
   if (isEmpty(values.aadhaarNumber)) {
     errors.aadhaarNumber = 'Aadhaar card number is required';
+  } else {
+    const aadhaarError = validateAadhaarNumber(values.aadhaarNumber);
+    if (aadhaarError) errors.aadhaarNumber = aadhaarError;
   }
-  if (isEmpty(values.panNumber)) errors.panNumber = 'PAN card number is required';
+
+  if (isEmpty(values.panNumber)) {
+    errors.panNumber = 'PAN card number is required';
+  } else {
+    const panError = validatePanNumber(values.panNumber);
+    if (panError) errors.panNumber = panError;
+  }
 
   if (isEmpty(values.accountHolderName)) {
     errors.accountHolderName = 'Account holder name is required';
   }
-  if (isEmpty(values.accountNumber)) errors.accountNumber = 'Account number is required';
+
+  if (isEmpty(values.accountNumber)) {
+    errors.accountNumber = 'Account number is required';
+  } else {
+    const accountError = validateBankAccountNumber(values.accountNumber);
+    if (accountError) errors.accountNumber = accountError;
+  }
+
   if (isEmpty(values.confirmAccountNumber)) {
     errors.confirmAccountNumber = 'Please confirm your account number';
   } else if (values.accountNumber !== values.confirmAccountNumber) {
     errors.confirmAccountNumber = 'Account numbers do not match';
   }
-  if (isEmpty(values.ifscCode)) errors.ifscCode = 'IFSC code is required';
+
+  if (isEmpty(values.ifscCode)) {
+    errors.ifscCode = 'IFSC code is required';
+  } else {
+    const ifscError = validateIfscCode(values.ifscCode);
+    if (ifscError) errors.ifscCode = ifscError;
+  }
+
   if (isEmpty(values.bankName)) errors.bankName = 'Bank name is required';
 
   if (isEmpty(values.nomineeName)) errors.nomineeName = 'Nominee name is required';
   if (isEmpty(values.relationship)) errors.relationship = 'Relationship is required';
+
   if (isEmpty(values.nomineeAadhaar)) {
     errors.nomineeAadhaar = 'Nominee Aadhaar number is required';
-  }
-  if (isEmpty(values.nomineePercentage)) {
-    errors.nomineePercentage = 'Nominee percentage is required';
+  } else {
+    const nomineeAadhaarError = validateAadhaarNumber(values.nomineeAadhaar);
+    if (nomineeAadhaarError) errors.nomineeAadhaar = nomineeAadhaarError;
   }
 
   if (isEmpty(values.password)) {

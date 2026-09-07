@@ -48,7 +48,7 @@ async function resolvePhone(
 ): Promise<PhoneContext> {
   let rawMobile: string | null = null;
 
-  if (mode === 'forgotPassword') {
+  if (mode === 'forgotPassword' || mode === 'changePassword') {
     const email = options?.email?.trim().toLowerCase();
     if (!email) {
       throw new Error('Registered email address is required.');

@@ -54,7 +54,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
         id: 'investments-1',
         question: 'What is the minimum investment amount?',
         answer:
-          'The minimum fund amount is ₹1,00,000 per investment. Agreement charges of ₹1,550 are added separately when you submit a new fund request.',
+          'The minimum fund amount is ₹1,00,000 per investment. Agreement charges of ₹1,000 are added separately when you submit a new fund request.',
       },
       {
         id: 'investments-2',
@@ -66,7 +66,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
         id: 'investments-3',
         question: 'How is monthly interest calculated?',
         answer:
-          'Returns are calculated on a 30-day simple interest cycle at the applicable monthly rate on your principal. TDS is deducted from the gross interest, and the net amount is added to your total earnings.',
+          'Returns are calculated on a 30-day simple interest cycle at the applicable monthly rate on your principal, and only after your pay date has been reached. TDS is deducted from the gross interest, and the net amount is added to your total earnings.',
       },
       {
         id: 'investments-4',
@@ -91,7 +91,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
         id: 'withdrawals-1',
         question: 'What is the difference between full and partial withdrawal?',
         answer:
-          'Full withdrawal pays out your principal plus accumulated earnings and closes the investment. Partial withdrawal lets you withdraw a portion of your principal while keeping the account active, subject to the minimum balance rule.',
+          'Full withdrawal pays out your principal plus accumulated earnings and closes the investment. Partial withdrawal pays out only the principal you request. Agreement charges for new fund requests are collected separately when payment is enabled; withdrawals are not reduced by that charge.',
       },
       {
         id: 'withdrawals-2',
@@ -128,7 +128,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
         id: 'earnings-1',
         question: 'When are earnings credited to my account?',
         answer:
-          'Earnings are credited at the end of each completed 30-day interest period while your investment remains Active. You can view accrued earnings on the investment details screen and in Transactions.',
+          'Earnings are credited after each completed 30-day interest period while your investment remains Active, and only once today’s date is on or after your scheduled pay date. You can view accrued earnings on the investment details screen and in Transactions.',
       },
       {
         id: 'earnings-2',

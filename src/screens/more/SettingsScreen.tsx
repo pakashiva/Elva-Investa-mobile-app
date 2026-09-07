@@ -6,10 +6,14 @@ import {
   ScrollView,
   TouchableOpacity,
   Switch,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAuth } from '../../contexts/AuthContext';
 import { SETTINGS_LEGAL_ITEMS } from '../../data/settings';
+import { navigationRef } from '../../navigation/navigationRef';
 import { MoreStackScreenProps } from '../../navigation/types';
 import { colors, spacing } from '../../theme/colors';
 
@@ -17,7 +21,46 @@ type Props = MoreStackScreenProps<'Settings'>;
 
 export default function SettingsScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
+  const { session, clearOtpFlow } = useAuth();
   const [pushEnabled, setPushEnabled] = useState(true);
+  const [isStartingPasswordChange, setIsStartingPasswordChange] = useState(false);
+
+  const handleChangePassword = async () => {
+    const email = session?.user?.email?.trim().toLowerCase();
+    if (!email) {
+      Alert.alert(
+        'Email required',
+        'Your account email is missing. Please sign in again and try once more.'
+      );
+      return;
+    }
+
+    setIsStartingPasswordChange(true);
+    clearOtpFlow();
+
+    try {
+      if (!navigationRef.isReady()) {
+        throw new Error('Navigation is not ready. Please try again.');
+      }
+      navigationRef.navigate('VerifyMobileNumber', {
+        mode: 'changePassword',
+        email,
+        sendOtp: true,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Unable to start password change.';
+      Alert.alert('Unable to continue', message);
+    } finally {
+      setIsStartingPasswordChange(false);
+    }
+  };
+
+  const handleLegalPress = (id: (typeof SETTINGS_LEGAL_ITEMS)[number]['id']) => {
+    navigation.navigate('LegalDocument', { documentId: id });
+  };
 
   return (
     <View style={[styles.safe, { paddingTop: insets.top }]}>
@@ -56,16 +99,20 @@ export default function SettingsScreen({ navigation }: Props) {
             <View style={styles.rowText}>
               <Text style={styles.rowTitle}>Change Password</Text>
               <Text style={styles.rowSubtitle}>
-                Update your account password for entry
+                Verify mobile OTP, then set a new password
               </Text>
             </View>
             <TouchableOpacity
               style={styles.updateBtn}
               activeOpacity={0.8}
-              // Password change will be implemented later
-              onPress={() => {}}
+              onPress={handleChangePassword}
+              disabled={isStartingPasswordChange}
             >
-              <Text style={styles.updateBtnText}>Update</Text>
+              {isStartingPasswordChange ? (
+                <ActivityIndicator size="small" color={colors.primarySoft} />
+              ) : (
+                <Text style={styles.updateBtnText}>Update</Text>
+              )}
             </TouchableOpacity>
           </View>
         </View>
@@ -80,6 +127,8 @@ export default function SettingsScreen({ navigation }: Props) {
                 color={colors.primarySoft}
               />
             </View>
+
+            
             <View style={styles.rowText}>
               <Text style={styles.rowTitle}>Push Notifications</Text>
               <Text style={styles.rowSubtitle}>
@@ -102,8 +151,7 @@ export default function SettingsScreen({ navigation }: Props) {
             key={item.id}
             style={[styles.card, styles.legalCard]}
             activeOpacity={0.75}
-            // Legal/info destinations will be implemented later
-            onPress={() => {}}
+            onPress={() => handleLegalPress(item.id)}
           >
             <View style={styles.row}>
               <View style={styles.iconCircle}>
@@ -113,7 +161,7 @@ export default function SettingsScreen({ navigation }: Props) {
                 {item.label}
               </Text>
               <Ionicons
-                name="chevron-down"
+                name="chevron-forward"
                 size={18}
                 color={colors.textMuted}
               />
@@ -236,6 +284,8 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
+    minWidth: 72,
+    alignItems: 'center',
   },
   updateBtnText: {
     fontSize: 13,

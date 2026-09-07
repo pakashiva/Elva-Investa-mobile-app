@@ -26,7 +26,6 @@ export type RegistrationFormValues = {
   nomineeName: string;
   relationship: string;
   nomineeAadhaar: string;
-  nomineePercentage: string;
   password: string;
   confirmPassword: string;
   authorized: boolean;

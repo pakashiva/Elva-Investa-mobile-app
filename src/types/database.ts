@@ -114,7 +114,6 @@ export type Database = {
           nominee_name: string;
           relationship: string;
           nominee_aadhaar: string;
-          nominee_percentage: string;
           created_at: string;
         };
         Insert: {
@@ -123,10 +122,35 @@ export type Database = {
           nominee_name: string;
           relationship: string;
           nominee_aadhaar: string;
-          nominee_percentage: string;
           created_at?: string;
         };
         Update: Partial<Database['public']['Tables']['nominees']['Insert']>;
+        Relationships: [];
+      };
+      notifications: {
+        Row: {
+          id: string;
+          user_id: string;
+          kind: string;
+          title: string;
+          body: string;
+          reference_id: string | null;
+          decision: string;
+          is_read: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          kind: string;
+          title: string;
+          body: string;
+          reference_id?: string | null;
+          decision: string;
+          is_read?: boolean;
+          created_at?: string;
+        };
+        Update: Partial<Database['public']['Tables']['notifications']['Insert']>;
         Relationships: [];
       };
       investments: {
@@ -134,6 +158,7 @@ export type Database = {
           id: string;
           user_id: string;
           code: string;
+          request_id: string | null;
           name: string;
           detail_subtitle: string | null;
           status: string;
@@ -162,6 +187,7 @@ export type Database = {
           id?: string;
           user_id: string;
           code?: string;
+          request_id?: string | null;
           name?: string;
           detail_subtitle?: string | null;
           status?: string;
@@ -214,6 +240,7 @@ export type Database = {
           withdrawal_amount: number;
           strategy: string;
           code: string;
+          request_id: string | null;
           requested_on: string;
           net_payout: number | null;
           status_date: string;
@@ -229,6 +256,7 @@ export type Database = {
           withdrawal_amount: number;
           strategy?: string;
           code?: string;
+          request_id?: string | null;
           requested_on?: string;
           net_payout?: number | null;
           status_date?: string;

@@ -5,29 +5,30 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  Image,
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import BankAccountCard from '../../components/BankAccountCard';
+import ProfileAvatar from '../../components/ProfileAvatar';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNotificationBell } from '../../hooks/useNotificationBell';
 import { getUserBankAccountsList } from '../../services/bankAccountService';
 import { BankAccount } from '../../types/bankAccount';
 import { isMissingTableError } from '../../utils/supabaseErrors';
 import { MoreStackScreenProps } from '../../navigation/types';
 import { colors, spacing } from '../../theme/colors';
+import { DEFAULT_PROFILE_AVATAR } from '../../constants/brandAssets';
 
-import { BRAND_LOGO_MARK } from '../../constants/brandAssets';
-
-const avatarSource = BRAND_LOGO_MARK;
+const avatarSource = DEFAULT_PROFILE_AVATAR;
 
 type Props = MoreStackScreenProps<'MyBankAccounts'>;
 
 export default function MyBankAccountsScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const { session } = useAuth();
+  const { hasUnread, openNotifications } = useNotificationBell();
   const [accounts, setAccounts] = useState<BankAccount[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -84,19 +85,19 @@ export default function MyBankAccountsScreen({ navigation }: Props) {
         </View>
 
         <View style={styles.headerActions}>
-          <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
+          <TouchableOpacity
+            style={styles.bellBtn}
+            activeOpacity={0.7}
+            onPress={openNotifications}
+          >
             <Ionicons
               name="notifications-outline"
               size={20}
               color={colors.textPrimary}
             />
-            <View style={styles.notifBadge} />
+            {hasUnread ? <View style={styles.notifBadge} /> : null}
           </TouchableOpacity>
-          <Image
-            source={avatarSource}
-            style={styles.avatar}
-            resizeMode="contain"
-          />
+          <ProfileAvatar source={avatarSource} size={36} />
         </View>
       </View>
 

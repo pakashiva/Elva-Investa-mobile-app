@@ -1,34 +1,22 @@
 import React from 'react';
 import { View, StyleSheet, Dimensions } from 'react-native';
 import Svg, { Path, Circle, Line } from 'react-native-svg';
+import { ChartPoint } from '../services/performanceService';
 import { colors, spacing } from '../theme/colors';
 
 const CHART_HEIGHT = 150;
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const CHART_WIDTH = SCREEN_WIDTH - spacing.screen * 2 - 32;
 
-const POINTS_1Y = [
-  { x: 0.0, y: 0.52 },
-  { x: 0.22, y: 0.38 },
-  { x: 0.42, y: 0.68 },
-  { x: 0.58, y: 0.32 },
-  { x: 0.78, y: 0.42 },
-  { x: 1.0, y: 0.12 },
+const FALLBACK_POINTS: ChartPoint[] = [
+  { x: 0, y: 0.55 },
+  { x: 0.35, y: 0.55 },
+  { x: 0.7, y: 0.55 },
+  { x: 1, y: 0.55 },
 ];
-
-const POINTS_ALL = [
-  { x: 0.0, y: 0.7 },
-  { x: 0.2, y: 0.55 },
-  { x: 0.4, y: 0.62 },
-  { x: 0.55, y: 0.35 },
-  { x: 0.75, y: 0.4 },
-  { x: 1.0, y: 0.15 },
-];
-
-const DOT_INDEXES = [1, 3, 4, 5];
 
 function toCoords(
-  points: { x: number; y: number }[],
+  points: ChartPoint[],
   width: number,
   height: number,
   padY = 16
@@ -57,14 +45,21 @@ function buildSmoothPath(coords: { x: number; y: number }[]) {
 }
 
 type Props = {
-  range?: '1Y' | 'ALL';
+  points?: ChartPoint[];
 };
 
-export default function PerformanceChart({ range = '1Y' }: Props) {
-  const points = range === 'ALL' ? POINTS_ALL : POINTS_1Y;
-  const coords = toCoords(points, CHART_WIDTH, CHART_HEIGHT);
+export default function PerformanceChart({ points }: Props) {
+  const series =
+    points && points.length >= 2 ? points : FALLBACK_POINTS;
+  const coords = toCoords(series, CHART_WIDTH, CHART_HEIGHT);
   const path = buildSmoothPath(coords);
   const lastIdx = coords.length - 1;
+  const dotIndexes =
+    coords.length <= 4
+      ? coords.map((_, i) => i)
+      : [1, Math.floor(coords.length / 2), coords.length - 2, lastIdx].filter(
+          (v, i, arr) => arr.indexOf(v) === i && v >= 0
+        );
 
   return (
     <View style={styles.wrap}>
@@ -93,7 +88,7 @@ export default function PerformanceChart({ range = '1Y' }: Props) {
           strokeLinecap="round"
           strokeLinejoin="round"
         />
-        {DOT_INDEXES.map((idx) => {
+        {dotIndexes.map((idx) => {
           const c = coords[idx];
           if (!c) return null;
           const isLast = idx === lastIdx;

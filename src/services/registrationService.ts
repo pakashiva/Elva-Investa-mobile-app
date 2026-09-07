@@ -1,5 +1,6 @@
 import { parseDateOfBirth } from '../utils/formatDate';
 import { RegistrationFormValues } from '../types/registrationForm';
+import { normalizeMobileDigits } from '../utils/indianValidators';
 import { signUpWithEmail } from './authService';
 import { supabase } from '../lib/supabase';
 
@@ -38,10 +39,18 @@ async function assertEmailMobileComboAvailable(
 export async function registerUser(
   form: RegistrationFormValues
 ): Promise<RegistrationResult> {
-  await assertEmailMobileComboAvailable(form.emailAddress, form.mobileNumber);
+  const mobileNumber = normalizeMobileDigits(form.mobileNumber);
+  const emailAddress = form.emailAddress.trim().toLowerCase();
+  const panNumber = form.panNumber.trim().toUpperCase();
+  const ifscCode = form.ifscCode.trim().toUpperCase();
+  const aadhaarNumber = form.aadhaarNumber.replace(/\D/g, '');
+  const nomineeAadhaar = form.nomineeAadhaar.replace(/\D/g, '');
+  const accountNumber = form.accountNumber.replace(/\D/g, '');
+
+  await assertEmailMobileComboAvailable(emailAddress, mobileNumber);
 
   const { session } = await signUpWithEmail(
-    form.emailAddress,
+    emailAddress,
     form.password,
     form.fullName
   );
@@ -58,8 +67,8 @@ export async function registerUser(
     const profileResult = await supabase.from('profiles').insert({
       user_id: userId,
       full_name: form.fullName.trim(),
-      mobile_number: form.mobileNumber.trim(),
-      email_address: form.emailAddress.trim().toLowerCase(),
+      mobile_number: mobileNumber,
+      email_address: emailAddress,
       date_of_birth: toIsoDate(form.dateOfBirth),
       address: form.address.trim(),
       city: form.city.trim(),
@@ -81,8 +90,8 @@ export async function registerUser(
 
     const kycResult = await supabase.from('kyc_documents').insert({
       user_id: userId,
-      aadhaar_number: form.aadhaarNumber.trim(),
-      pan_number: form.panNumber.trim(),
+      aadhaar_number: aadhaarNumber,
+      pan_number: panNumber,
       aadhaar_front_path: null,
       aadhaar_back_path: null,
       pan_card_path: null,
@@ -95,8 +104,8 @@ export async function registerUser(
     const bankResult = await supabase.from('bank_accounts').insert({
       user_id: userId,
       account_holder_name: form.accountHolderName.trim(),
-      account_number: form.accountNumber.trim(),
-      ifsc_code: form.ifscCode.trim().toUpperCase(),
+      account_number: accountNumber,
+      ifsc_code: ifscCode,
       bank_name: form.bankName.trim(),
       account_type: form.accountType,
       is_primary: true,
@@ -110,8 +119,7 @@ export async function registerUser(
       user_id: userId,
       nominee_name: form.nomineeName.trim(),
       relationship: form.relationship,
-      nominee_aadhaar: form.nomineeAadhaar.trim(),
-      nominee_percentage: form.nomineePercentage.trim(),
+      nominee_aadhaar: nomineeAadhaar,
     });
 
     if (nomineeResult.error) {

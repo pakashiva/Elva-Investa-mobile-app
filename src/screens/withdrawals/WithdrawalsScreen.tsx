@@ -5,24 +5,28 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  Image,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import WithdrawalCard from '../../components/WithdrawalCard';
+import ProfileAvatar from '../../components/ProfileAvatar';
 import { useAuth } from '../../contexts/AuthContext';
-import { getUserWithdrawals } from '../../services/withdrawalService';
+import { useNotificationBell } from '../../hooks/useNotificationBell';
+import {
+  cancelWithdrawalRequest,
+  getUserWithdrawals,
+} from '../../services/withdrawalService';
 import { isMissingTableError } from '../../utils/supabaseErrors';
 import { WithdrawalRequest } from '../../types/withdrawal';
 import { WithdrawalsStackParamList } from '../../navigation/types';
 import { colors, spacing } from '../../theme/colors';
+import { DEFAULT_PROFILE_AVATAR } from '../../constants/brandAssets';
 
-import { BRAND_LOGO_MARK } from '../../constants/brandAssets';
-
-const avatarSource = BRAND_LOGO_MARK;
+const avatarSource = DEFAULT_PROFILE_AVATAR;
 
 type Nav = NativeStackNavigationProp<
   WithdrawalsStackParamList,
@@ -33,16 +37,20 @@ export default function WithdrawalsScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<Nav>();
   const { session } = useAuth();
+  const { hasUnread, openNotifications } = useNotificationBell();
   const [userWithdrawals, setUserWithdrawals] = useState<WithdrawalRequest[]>(
     []
   );
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
 
   const loadUserWithdrawals = useCallback(async () => {
     const userId = session?.user?.id;
     if (!userId) {
       setUserWithdrawals([]);
+      setSelectedId(null);
       return;
     }
 
@@ -52,9 +60,15 @@ export default function WithdrawalsScreen() {
     try {
       const withdrawals = await getUserWithdrawals(userId);
       setUserWithdrawals(withdrawals);
+      setSelectedId((current) =>
+        current && withdrawals.some((item) => item.id === current)
+          ? current
+          : null
+      );
     } catch (error) {
       if (isMissingTableError(error)) {
         setUserWithdrawals([]);
+        setSelectedId(null);
         return;
       }
       const message =
@@ -70,6 +84,58 @@ export default function WithdrawalsScreen() {
       loadUserWithdrawals();
     }, [loadUserWithdrawals])
   );
+
+  const handleCardPress = (item: WithdrawalRequest) => {
+    if (item.status !== 'Processing') {
+      setSelectedId(null);
+      return;
+    }
+    setSelectedId((current) => (current === item.id ? null : item.id));
+  };
+
+  const handleCancelPress = (item: WithdrawalRequest) => {
+    const userId = session?.user?.id;
+    if (!userId || cancellingId) {
+      return;
+    }
+
+    Alert.alert(
+      'Cancel withdraw request?',
+      'This will permanently remove the Processing request. You can create a new one later.',
+      [
+        { text: 'Keep request', style: 'cancel' },
+        {
+          text: 'Cancel request',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              setCancellingId(item.id);
+              try {
+                await cancelWithdrawalRequest(userId, item.id);
+                setUserWithdrawals((prev) =>
+                  prev.filter((row) => row.id !== item.id)
+                );
+                setSelectedId(null);
+              } catch (error) {
+                const message =
+                  error instanceof Error
+                    ? error.message
+                    : 'Unable to cancel this request right now.';
+                Alert.alert('Cancel failed', message);
+                try {
+                  await loadUserWithdrawals();
+                } catch {
+                  // List refresh is best-effort after a failed cancel.
+                }
+              } finally {
+                setCancellingId(null);
+              }
+            })();
+          },
+        },
+      ]
+    );
+  };
 
   return (
     <View style={[styles.safe, { paddingTop: insets.top }]}>
@@ -88,22 +154,19 @@ export default function WithdrawalsScreen() {
                 </Text>
               </View>
               <View style={styles.headerActions}>
-                <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
+                <TouchableOpacity
+                  style={styles.bellBtn}
+                  activeOpacity={0.7}
+                  onPress={openNotifications}
+                >
                   <Ionicons
                     name="notifications-outline"
                     size={20}
                     color={colors.textPrimary}
                   />
-                  <View style={styles.notifBadge} />
+                  {hasUnread ? <View style={styles.notifBadge} /> : null}
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.profileRow} activeOpacity={0.7}>
-                  <Image
-                    source={avatarSource}
-                    style={styles.avatar}
-                    resizeMode="contain"
-                  />
-                  <Ionicons name="chevron-down" size={14} color="#5A6577" />
-                </TouchableOpacity>
+                <ProfileAvatar source={avatarSource} size={36} showChevron />
               </View>
             </View>
 
@@ -126,7 +189,19 @@ export default function WithdrawalsScreen() {
             ) : null}
           </View>
         }
-        renderItem={({ item }) => <WithdrawalCard withdrawal={item} />}
+        renderItem={({ item }) => (
+          <WithdrawalCard
+            withdrawal={item}
+            selected={selectedId === item.id}
+            onPress={() => handleCardPress(item)}
+            onCancelPress={
+              item.status === 'Processing'
+                ? () => handleCancelPress(item)
+                : undefined
+            }
+            isCancelling={cancellingId === item.id}
+          />
+        )}
         ListEmptyComponent={
           !isLoading ? (
             <View style={styles.empty}>

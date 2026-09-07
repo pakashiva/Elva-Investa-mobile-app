@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Image,
   Dimensions,
   ActivityIndicator,
 } from 'react-native';
@@ -15,6 +14,8 @@ import * as Clipboard from 'expo-clipboard';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { REFERRAL_STEPS } from '../../data/referrals';
+import { useNotificationBell } from '../../hooks/useNotificationBell';
+import ProfileAvatar from '../../components/ProfileAvatar';
 import {
   formatReferralHistoryForDisplay,
   formatReferralStatsForDisplay,
@@ -23,10 +24,9 @@ import {
 } from '../../services/referralService';
 import { MoreStackScreenProps } from '../../navigation/types';
 import { colors, spacing } from '../../theme/colors';
+import { DEFAULT_PROFILE_AVATAR } from '../../constants/brandAssets';
 
-import { BRAND_LOGO_MARK } from '../../constants/brandAssets';
-
-const avatarSource = BRAND_LOGO_MARK;
+const avatarSource = DEFAULT_PROFILE_AVATAR;
 const STAT_GAP = 8;
 const STAT_WIDTH =
   (Dimensions.get('window').width - spacing.screen * 2 - STAT_GAP * 2) / 3;
@@ -35,6 +35,7 @@ type Props = MoreStackScreenProps<'ReferEarn'>;
 
 export default function ReferEarnScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
+  const { hasUnread, openNotifications } = useNotificationBell();
   const [copied, setCopied] = useState(false);
   const [referralCode, setReferralCode] = useState('');
   const [statsCards, setStatsCards] = useState<
@@ -131,22 +132,19 @@ export default function ReferEarnScreen({ navigation }: Props) {
         </View>
 
         <View style={styles.headerActions}>
-          <TouchableOpacity style={styles.bellBtn} activeOpacity={0.7}>
+          <TouchableOpacity
+            style={styles.bellBtn}
+            activeOpacity={0.7}
+            onPress={openNotifications}
+          >
             <Ionicons
               name="notifications-outline"
               size={20}
               color={colors.textPrimary}
             />
-            <View style={styles.notifBadge} />
+            {hasUnread ? <View style={styles.notifBadge} /> : null}
           </TouchableOpacity>
-          <TouchableOpacity style={styles.profileRow} activeOpacity={0.7}>
-            <Image
-              source={avatarSource}
-              style={styles.avatar}
-              resizeMode="contain"
-            />
-            <Ionicons name="chevron-down" size={14} color="#5A6577" />
-          </TouchableOpacity>
+          <ProfileAvatar source={avatarSource} size={36} showChevron />
         </View>
       </View>
 

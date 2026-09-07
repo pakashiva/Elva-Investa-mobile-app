@@ -2,7 +2,6 @@ import React, { useEffect } from 'react';
 import { ActivityIndicator, View, StyleSheet } from 'react-native';
 import {
   NavigationContainer,
-  createNavigationContainerRef,
 } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../contexts/AuthContext';
@@ -11,11 +10,13 @@ import SplashScreen from '../screens/auth/SplashScreen';
 import SignInScreen from '../screens/auth/SignInScreen';
 import CreateAccountScreen from '../screens/auth/CreateAccountScreen';
 import VerifyMobileNumberScreen from '../screens/auth/VerifyMobileNumberScreen';
+import NotificationsScreen from '../screens/notifications/NotificationsScreen';
+import { navigationRef } from './navigationRef';
 import { RootStackParamList } from './types';
 import { colors } from '../theme/colors';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
-export const navigationRef = createNavigationContainerRef<RootStackParamList>();
+export { navigationRef };
 
 function LoadingScreen() {
   return (
@@ -59,7 +60,8 @@ function AuthNavigationHandler() {
     if (!session) {
       if (
         currentRoute === 'VerifyMobileNumber' &&
-        currentParams?.mode === 'forgotPassword'
+        (currentParams?.mode === 'forgotPassword' ||
+          currentParams?.mode === 'changePassword')
       ) {
         return;
       }
@@ -75,7 +77,8 @@ function AuthNavigationHandler() {
 
     if (
       currentRoute === 'VerifyMobileNumber' &&
-      currentParams?.mode === 'forgotPassword'
+      (currentParams?.mode === 'forgotPassword' ||
+        currentParams?.mode === 'changePassword')
     ) {
       return;
     }
@@ -166,6 +169,11 @@ export default function RootNavigator() {
             animation: 'slide_from_right',
             gestureEnabled: false,
           }}
+        />
+        <Stack.Screen
+          name="Notifications"
+          component={NotificationsScreen}
+          options={{ animation: 'slide_from_right' }}
         />
       </Stack.Navigator>
     </NavigationContainer>

@@ -55,6 +55,8 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
   const shouldSendOtpOnEntry = route.params?.sendOtp === true;
   const recoveryEmail = route.params?.email?.trim().toLowerCase() ?? '';
   const isForgotPassword = mode === 'forgotPassword';
+  const isChangePassword = mode === 'changePassword';
+  const isPasswordResetFlow = isForgotPassword || isChangePassword;
 
   const [otp, setOtp] = useState(VERIFY_MOBILE_DEFAULTS.otp);
   const [newPassword, setNewPassword] = useState(
@@ -76,12 +78,17 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
 
   const { formatted, canResend, isExpired, reset } = useOtpCountdown(expiresIn);
 
-  const otpOptions = isForgotPassword
-    ? { mode: 'forgotPassword' as const, email: recoveryEmail }
+  const otpOptions = isPasswordResetFlow
+    ? {
+        mode: isChangePassword
+          ? ('changePassword' as const)
+          : ('forgotPassword' as const),
+        email: recoveryEmail,
+      }
     : { mode: 'registration' as const, userId: session?.user?.id };
 
   const loadMobileNumber = useCallback(async () => {
-    if (isForgotPassword) {
+    if (isPasswordResetFlow) {
       if (!recoveryEmail) {
         setErrorMessage('Registered email address is required.');
       }
@@ -110,15 +117,15 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
           : 'Failed to load mobile number.';
       setErrorMessage(message);
     }
-  }, [isForgotPassword, recoveryEmail, session?.user?.id]);
+  }, [isPasswordResetFlow, recoveryEmail, session?.user?.id]);
 
   const handleSendOtp = useCallback(async () => {
-    if (isForgotPassword && !recoveryEmail) {
+    if (isPasswordResetFlow && !recoveryEmail) {
       setErrorMessage('Registered email address is required.');
       return;
     }
 
-    if (!isForgotPassword && !session?.user?.id) {
+    if (!isPasswordResetFlow && !session?.user?.id) {
       setErrorMessage(
         'Please complete registration before verifying your mobile number.'
       );
@@ -145,7 +152,13 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
     } finally {
       setIsSendingOtp(false);
     }
-  }, [isForgotPassword, otpOptions, recoveryEmail, reset, session?.user?.id]);
+  }, [
+    isPasswordResetFlow,
+    otpOptions,
+    recoveryEmail,
+    reset,
+    session?.user?.id,
+  ]);
 
   useEffect(() => {
     loadMobileNumber();
@@ -156,7 +169,7 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
       return;
     }
 
-    if (isForgotPassword) {
+    if (isPasswordResetFlow) {
       if (!recoveryEmail) {
         setErrorMessage('Registered email address is required.');
         return;
@@ -170,7 +183,7 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
   }, [
     shouldSendOtpOnEntry,
     handleSendOtp,
-    isForgotPassword,
+    isPasswordResetFlow,
     recoveryEmail,
     session?.user?.id,
   ]);
@@ -225,7 +238,7 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
     try {
       const response = await verifyOtp(cleanedOtp, otpOptions);
 
-      if (isForgotPassword) {
+      if (isPasswordResetFlow) {
         setOtpVerified(true);
         setStatusMessage(response.message);
         return;
@@ -254,7 +267,7 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
   };
 
   const handleSetPasswordAndContinue = async () => {
-    if (!isForgotPassword || isResettingPassword) {
+    if (!isPasswordResetFlow || isResettingPassword) {
       return;
     }
 
@@ -297,7 +310,16 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
   };
 
   const handleBack = async () => {
-    if (!isForgotPassword && session) {
+    if (isChangePassword && session) {
+      clearOtpFlow();
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'MainTabs' }],
+      });
+      return;
+    }
+
+    if (!isPasswordResetFlow && session) {
       await signOut();
     }
 
@@ -329,7 +351,13 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
         >
           <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Verify Mobile Number</Text>
+        <Text style={styles.headerTitle}>
+          {isChangePassword
+            ? 'Change Password'
+            : isForgotPassword
+              ? 'Reset Password'
+              : 'Verify Mobile Number'}
+        </Text>
       </View>
 
       <KeyboardAvoidingView
@@ -435,9 +463,11 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
             )}
           </TouchableOpacity>
 
-          {isForgotPassword && otpVerified ? (
+          {isPasswordResetFlow && otpVerified ? (
             <View style={styles.passwordSection}>
-              <Text style={styles.passwordHeading}>Set Your Password</Text>
+              <Text style={styles.passwordHeading}>
+                {isChangePassword ? 'Set New Password' : 'Set Your Password'}
+              </Text>
 
               <PasswordInput
                 label="New Password"
@@ -473,7 +503,11 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
                 {isResettingPassword ? (
                   <ActivityIndicator color="#FFFFFF" />
                 ) : (
-                  <Text style={styles.primaryBtnText}>Set Password & Continue</Text>
+                  <Text style={styles.primaryBtnText}>
+                    {isChangePassword
+                      ? 'Update Password'
+                      : 'Set Password & Continue'}
+                  </Text>
                 )}
               </TouchableOpacity>
             </View>

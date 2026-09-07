@@ -49,6 +49,13 @@ export default function BottomTabBar({
                 return;
               }
 
+              // Always open the More menu — do not restore a nested screen
+              // (e.g. MyProfile opened from the Home avatar).
+              if (tab.key === 'More') {
+                navigation.navigate('More', { screen: 'Menu' });
+                return;
+              }
+
               if (!isFocused) {
                 navigation.navigate(tab.key);
               }

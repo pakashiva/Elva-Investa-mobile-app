@@ -14,7 +14,7 @@ export default function PayableInfoBanner({ totalDisplay, detail }: Props) {
         <Ionicons name="shield-checkmark" size={14} color="#FFFFFF" />
       </View>
       <Text style={styles.text}>
-        Total payable including agreement charges:{' '}
+        Total payable including agreement charges (payment gateway coming soon):{' '}
         <Text style={styles.amount}>{totalDisplay}</Text> {detail}
       </Text>
     </View>

@@ -4,6 +4,7 @@ export type UserProfileDetails = {
   emailAddress: string;
   dateOfBirth: string;
   panNumber: string | null;
+  customerId: string | null;
   verified: boolean;
 };
 

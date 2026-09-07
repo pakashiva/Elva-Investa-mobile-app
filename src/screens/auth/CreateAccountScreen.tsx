@@ -358,13 +358,6 @@ export default function CreateAccountScreen({ navigation }: Props) {
             error={errors.nomineeAadhaar}
             keyboardType="number-pad"
           />
-          <RegistrationTextField
-            label="Nominee Percentage"
-            required
-            value={form.nomineePercentage}
-            onChangeText={(text) => updateField('nomineePercentage', text)}
-            error={errors.nomineePercentage}
-          />
 
           <RegistrationSectionHeader
             number={5}

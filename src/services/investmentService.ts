@@ -8,6 +8,7 @@ export type InvestmentRow = {
   id: string;
   user_id: string;
   code: string;
+  request_id?: string | null;
   name: string;
   detail_subtitle: string | null;
   status: InvestmentStatus;
@@ -59,7 +60,7 @@ function mapInvestmentRow(row: InvestmentRow): Investment {
 
   return {
     id: row.id,
-    code: row.code,
+    code: row.request_id?.trim() || row.code,
     name: row.name,
     detailSubtitle: row.detail_subtitle ?? `${row.name} Investment`,
     status: row.status,
@@ -126,7 +127,7 @@ export async function getActiveInvestmentsForWithdrawal(
 
   const { data, error } = await supabase
     .from('investments')
-    .select('id, code, name, fund_amount, total_earnings, current_value')
+    .select('id, code, request_id, name, fund_amount, total_earnings, current_value')
     .eq('user_id', userId)
     .eq('status', 'Active')
     .order('created_at', { ascending: false });
@@ -157,9 +158,11 @@ export async function getActiveInvestmentsForWithdrawal(
 
       return {
         id: row.id,
-        code: row.code,
+        code: (row as { request_id?: string | null }).request_id?.trim() || row.code,
         name: row.name,
-        label: `${row.code} · ${row.name}`,
+        label: `${
+          (row as { request_id?: string | null }).request_id?.trim() || row.code
+        } · ${row.name}`,
         principal,
         totalEarnings,
         withdrawalAmount,
@@ -221,7 +224,9 @@ export async function getActiveInvestmentForUser(
 
   const { data, error } = await supabase
     .from('investments')
-    .select('id, code, name, fund_amount, total_earnings, current_value, status')
+    .select(
+      'id, code, request_id, name, fund_amount, total_earnings, current_value, status'
+    )
     .eq('user_id', userId)
     .eq('id', investmentId)
     .eq('status', 'Active')
@@ -248,11 +253,14 @@ export async function getActiveInvestmentForUser(
       ? Number(data.current_value)
       : principal + totalEarnings;
 
+  const displayCode =
+    (data as { request_id?: string | null }).request_id?.trim() || data.code;
+
   return {
     id: data.id,
-    code: data.code,
+    code: displayCode,
     name: data.name,
-    label: `${data.code} · ${data.name}`,
+    label: `${displayCode} · ${data.name}`,
     principal,
     totalEarnings,
     withdrawalAmount,
@@ -260,6 +268,21 @@ export async function getActiveInvestmentForUser(
     hasOpenFullWithdrawal: open.hasOpenFullWithdrawal,
     availablePrincipal: Math.max(0, principal - open.openPartialAmount),
   };
+}
+
+export async function getUserInvestmentTitles(userId: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('investments')
+    .select('name')
+    .eq('user_id', userId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data ?? [])
+    .map((row) => (typeof row.name === 'string' ? row.name : ''))
+    .filter(Boolean);
 }
 
 export async function createFundRequest(
@@ -273,6 +296,16 @@ export async function createFundRequest(
   const title = input.title.trim();
   if (!title) {
     throw new Error('Fund title is required.');
+  }
+
+  const existingTitles = await getUserInvestmentTitles(input.userId);
+  const taken = existingTitles.some(
+    (name) => name.trim().toLowerCase() === title.toLowerCase()
+  );
+  if (taken) {
+    throw new Error(
+      'An investment with this title already exists. Please choose a different name.'
+    );
   }
 
   const { data, error } = await supabase

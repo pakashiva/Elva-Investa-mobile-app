@@ -145,7 +145,7 @@ export async function getUserProfileDetails(
   userId: string,
   fallbackEmail?: string | null
 ): Promise<UserProfileDetails | null> {
-  const [profileResult, kycResult] = await Promise.all([
+  const [profileResult, kycResult, customerResult] = await Promise.all([
     supabase
       .from('profiles')
       .select('full_name, mobile_number, email_address, date_of_birth')
@@ -154,6 +154,11 @@ export async function getUserProfileDetails(
     supabase
       .from('kyc_documents')
       .select('pan_number')
+      .eq('user_id', userId)
+      .maybeSingle(),
+    supabase
+      .from('customers')
+      .select('customer_id')
       .eq('user_id', userId)
       .maybeSingle(),
   ]);
@@ -173,10 +178,18 @@ export async function getUserProfileDetails(
     throw new Error(kycResult.error.message);
   }
 
+  if (customerResult.error && !isMissingTableError(customerResult.error)) {
+    throw new Error(customerResult.error.message);
+  }
+
   const profile = profileResult.data as ProfileRow;
   const kyc = (kycResult.data as KycRow | null) ?? null;
   const emailAddress =
     profile.email_address?.trim() || fallbackEmail?.trim() || '';
+  const customerId =
+    !customerResult.error && customerResult.data?.customer_id
+      ? String(customerResult.data.customer_id).trim() || null
+      : null;
 
   return {
     fullName: profile.full_name.trim(),
@@ -184,6 +197,7 @@ export async function getUserProfileDetails(
     emailAddress,
     dateOfBirth: formatProfileDateOfBirth(profile.date_of_birth),
     panNumber: kyc?.pan_number?.trim() || null,
+    customerId,
     verified: Boolean(kyc),
   };
 }
