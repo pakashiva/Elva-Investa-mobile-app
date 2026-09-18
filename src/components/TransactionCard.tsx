@@ -29,13 +29,9 @@ export default function TransactionCard({ transaction }: Props) {
         <Text style={styles.detailLabel}>Investment plan ID</Text>
         <Text style={styles.planId}>{transaction.planId}</Text>
       </View>
-      <View style={styles.detailRow}>
+      <View style={[styles.detailRow, styles.detailRowLast]}>
         <Text style={styles.detailLabel}>Type</Text>
         <Text style={styles.detailValue}>{transaction.type}</Text>
-      </View>
-      <View style={[styles.detailRow, styles.detailRowLast]}>
-        <Text style={styles.detailLabel}>Reference ID</Text>
-        <Text style={styles.detailValue}>{transaction.referenceId}</Text>
       </View>
     </View>
   );

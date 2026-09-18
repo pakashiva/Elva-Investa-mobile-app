@@ -4,9 +4,14 @@ import {
   withJwtRetry,
 } from '../utils/supabaseErrors';
 
+export type NotificationKind =
+  | 'investment'
+  | 'withdrawal'
+  | 'agreement_renewal';
+
 export type InvestorNotification = {
   id: string;
-  kind: 'investment' | 'withdrawal';
+  kind: NotificationKind;
   title: string;
   body: string;
   decision: 'approved' | 'rejected';
@@ -26,10 +31,16 @@ type NotificationRow = {
   created_at: string;
 };
 
+export function mapNotificationKind(kind: string): NotificationKind {
+  if (kind === 'withdrawal') return 'withdrawal';
+  if (kind === 'agreement_renewal') return 'agreement_renewal';
+  return 'investment';
+}
+
 function mapRow(row: NotificationRow): InvestorNotification {
   return {
     id: row.id,
-    kind: row.kind === 'withdrawal' ? 'withdrawal' : 'investment',
+    kind: mapNotificationKind(row.kind),
     title: row.title,
     body: row.body,
     decision: row.decision === 'rejected' ? 'rejected' : 'approved',

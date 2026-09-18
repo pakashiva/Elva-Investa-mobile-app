@@ -81,7 +81,7 @@ export const LEGAL_DOCUMENTS: Record<LegalDocumentId, LegalDocument> = {
       {
         heading: '7. Account security',
         paragraphs: [
-          'You must keep login credentials confidential. OTP verification is used for registration, password recovery, and password change. Notify us promptly if you suspect unauthorised access.',
+          'You must keep your MPIN confidential. OTP verification is used for registration, MPIN recovery, and MPIN change. Notify us promptly if you suspect unauthorised access.',
         ],
       },
       {
@@ -160,13 +160,13 @@ export const LEGAL_DOCUMENTS: Record<LegalDocumentId, LegalDocument> = {
       {
         heading: '5. Retention & security',
         paragraphs: [
-          'Account and transaction records are retained for as long as your relationship continues and thereafter as required for tax, dispute, and regulatory purposes. We apply access controls, encrypted transport, and role-based admin permissions. No method of transmission or storage is perfectly secure; please use a strong password and protect your device.',
+          'Account and transaction records are retained for as long as your relationship continues and thereafter as required for tax, dispute, and regulatory purposes. We apply access controls, encrypted transport, and role-based admin permissions. No method of transmission or storage is perfectly secure; please protect your MPIN and your device.',
         ],
       },
       {
         heading: '6. Your choices',
         paragraphs: [
-          'You may update profile and bank details in the App where available, request support for corrections, and change your password after mobile OTP verification. You may ask about access or deletion subject to legal retention needs.',
+          'You may update profile and bank details in the App where available, request support for corrections, and change your MPIN after mobile OTP verification. You may ask about access or deletion subject to legal retention needs.',
         ],
       },
       {
@@ -210,7 +210,7 @@ export const LEGAL_DOCUMENTS: Record<LegalDocumentId, LegalDocument> = {
       {
         heading: 'Our commitment',
         paragraphs: [
-          'We focus on transparent statuses, documented charges, and secure OTP-backed access for registration and password changes. For help with investments, withdrawals, or account issues, reach our support team during business hours.',
+          'We focus on transparent statuses, documented charges, and secure OTP-backed access for registration and MPIN changes. For help with investments, withdrawals, or account issues, reach our support team during business hours.',
           `Contact: ${supportPhone} · ${supportEmail} · ${HELP_SUPPORT_HOURS}`,
           `Registered office: ${officeAddress}`,
         ],

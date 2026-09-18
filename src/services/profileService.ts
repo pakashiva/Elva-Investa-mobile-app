@@ -134,7 +134,30 @@ export async function completePasswordRecovery(
         error.message.includes('not found'))
     ) {
       throw new Error(
-        'Password recovery is unavailable. Apply migration 008_otp_recovery.sql in Supabase SQL Editor.'
+        'Password recovery is unavailable. Apply migration 023_split_mpin_and_password.sql in Supabase SQL Editor.'
+      );
+    }
+    throw new Error(error.message);
+  }
+}
+
+export async function completeMpinRecovery(
+  email: string,
+  newMpin: string
+): Promise<void> {
+  const { error } = await supabase.rpc('complete_mpin_recovery', {
+    p_email: email.trim().toLowerCase(),
+    p_new_mpin: newMpin,
+  });
+
+  if (error) {
+    if (
+      error.message.includes('function') &&
+      (error.message.includes('does not exist') ||
+        error.message.includes('not found'))
+    ) {
+      throw new Error(
+        'MPIN recovery is unavailable. Apply migration 023_split_mpin_and_password.sql in Supabase SQL Editor.'
       );
     }
     throw new Error(error.message);

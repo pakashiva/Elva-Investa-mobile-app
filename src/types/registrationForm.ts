@@ -12,9 +12,6 @@ export type RegistrationFormValues = {
   emailAddress: string;
   dateOfBirth: string;
   address: string;
-  city: string;
-  state: string;
-  pinCode: string;
   aadhaarNumber: string;
   panNumber: string;
   accountHolderName: string;
@@ -22,12 +19,17 @@ export type RegistrationFormValues = {
   confirmAccountNumber: string;
   ifscCode: string;
   bankName: string;
+  branchName: string;
   accountType: BankAccountType;
   nomineeName: string;
   relationship: string;
   nomineeAadhaar: string;
+  nomineeMobile: string;
+  nomineePan: string;
   password: string;
   confirmPassword: string;
+  mpin: string;
+  confirmMpin: string;
   authorized: boolean;
 };
 

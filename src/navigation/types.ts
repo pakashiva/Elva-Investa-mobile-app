@@ -21,6 +21,10 @@ export type MoreStackParamList = {
   Menu: undefined;
   MyBankAccounts: undefined;
   AddBankAccount: undefined;
+  MyNominees: undefined;
+  AddNominee: undefined;
+  Agreements: undefined;
+  Earnings: undefined;
   ReferEarn: undefined;
   MyProfile: undefined;
   Settings: undefined;
@@ -40,6 +44,7 @@ export type MainTabParamList = {
 export type RootStackParamList = {
   Splash: undefined;
   SignIn: undefined;
+  MpinLock: undefined;
   CreateAccount: undefined;
   VerifyMobileNumber: VerifyMobileNumberParams;
   MainTabs: NavigatorScreenParams<MainTabParamList>;

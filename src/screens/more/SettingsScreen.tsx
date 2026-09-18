@@ -23,9 +23,15 @@ export default function SettingsScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const { session, clearOtpFlow } = useAuth();
   const [pushEnabled, setPushEnabled] = useState(true);
-  const [isStartingPasswordChange, setIsStartingPasswordChange] = useState(false);
+  const [isStartingMpinChange, setIsStartingMpinChange] = useState(false);
+  const [isStartingPasswordChange, setIsStartingPasswordChange] =
+    useState(false);
 
-  const handleChangePassword = async () => {
+  const startOtpChange = async (
+    mode: 'changeMpin' | 'changePassword',
+    setLoading: (value: boolean) => void,
+    errorTitle: string
+  ) => {
     const email = session?.user?.email?.trim().toLowerCase();
     if (!email) {
       Alert.alert(
@@ -35,7 +41,7 @@ export default function SettingsScreen({ navigation }: Props) {
       return;
     }
 
-    setIsStartingPasswordChange(true);
+    setLoading(true);
     clearOtpFlow();
 
     try {
@@ -43,20 +49,28 @@ export default function SettingsScreen({ navigation }: Props) {
         throw new Error('Navigation is not ready. Please try again.');
       }
       navigationRef.navigate('VerifyMobileNumber', {
-        mode: 'changePassword',
+        mode,
         email,
         sendOtp: true,
       });
     } catch (error) {
       const message =
-        error instanceof Error
-          ? error.message
-          : 'Unable to start password change.';
+        error instanceof Error ? error.message : `Unable to start ${errorTitle}.`;
       Alert.alert('Unable to continue', message);
     } finally {
-      setIsStartingPasswordChange(false);
+      setLoading(false);
     }
   };
+
+  const handleChangeMpin = () =>
+    startOtpChange('changeMpin', setIsStartingMpinChange, 'MPIN change');
+
+  const handleChangePassword = () =>
+    startOtpChange(
+      'changePassword',
+      setIsStartingPasswordChange,
+      'password change'
+    );
 
   const handleLegalPress = (id: (typeof SETTINGS_LEGAL_ITEMS)[number]['id']) => {
     navigation.navigate('LegalDocument', { documentId: id });
@@ -97,9 +111,39 @@ export default function SettingsScreen({ navigation }: Props) {
               />
             </View>
             <View style={styles.rowText}>
+              <Text style={styles.rowTitle}>Change MPIN</Text>
+              <Text style={styles.rowSubtitle}>
+                Verify mobile OTP, then set a new 4-digit MPIN
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.updateBtn}
+              activeOpacity={0.8}
+              onPress={handleChangeMpin}
+              disabled={isStartingMpinChange}
+            >
+              {isStartingMpinChange ? (
+                <ActivityIndicator size="small" color={colors.primarySoft} />
+              ) : (
+                <Text style={styles.updateBtnText}>Update</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.row}>
+            <View style={styles.iconCircle}>
+              <Ionicons
+                name="key-outline"
+                size={18}
+                color={colors.primarySoft}
+              />
+            </View>
+            <View style={styles.rowText}>
               <Text style={styles.rowTitle}>Change Password</Text>
               <Text style={styles.rowSubtitle}>
-                Verify mobile OTP, then set a new password
+                Verify mobile OTP, then set a new sign-in password
               </Text>
             </View>
             <TouchableOpacity

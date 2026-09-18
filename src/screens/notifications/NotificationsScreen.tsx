@@ -35,8 +35,27 @@ function formatNotificationTime(iso: string): string {
   });
 }
 
+function kindLabel(kind: InvestorNotification['kind']): string {
+  if (kind === 'withdrawal') return 'Withdrawal';
+  if (kind === 'agreement_renewal') return 'Renewal';
+  return 'Investment';
+}
+
 function NotificationIcon({ item }: { item: InvestorNotification }) {
   const approved = item.decision === 'approved';
+  const iconName =
+    item.kind === 'withdrawal'
+      ? approved
+        ? 'arrow-up-circle'
+        : 'close-circle'
+      : item.kind === 'agreement_renewal'
+        ? approved
+          ? 'refresh-circle'
+          : 'close-circle'
+        : approved
+          ? 'checkmark-circle'
+          : 'close-circle';
+
   return (
     <View
       style={[
@@ -45,15 +64,7 @@ function NotificationIcon({ item }: { item: InvestorNotification }) {
       ]}
     >
       <Ionicons
-        name={
-          item.kind === 'withdrawal'
-            ? approved
-              ? 'arrow-up-circle'
-              : 'close-circle'
-            : approved
-              ? 'checkmark-circle'
-              : 'close-circle'
-        }
+        name={iconName}
         size={22}
         color={approved ? colors.success : colors.danger}
       />
@@ -183,11 +194,13 @@ export default function NotificationsScreen({ navigation }: Props) {
                       styles.kindChip,
                       item.kind === 'withdrawal'
                         ? styles.kindChipWithdrawal
-                        : styles.kindChipInvestment,
+                        : item.kind === 'agreement_renewal'
+                          ? styles.kindChipRenewal
+                          : styles.kindChipInvestment,
                     ]}
                   >
                     <Text style={styles.kindChipText}>
-                      {item.kind === 'withdrawal' ? 'Withdrawal' : 'Investment'}
+                      {kindLabel(item.kind)}
                     </Text>
                   </View>
                 </View>
@@ -334,6 +347,9 @@ const styles = StyleSheet.create({
   },
   kindChipWithdrawal: {
     backgroundColor: '#EEF0F3',
+  },
+  kindChipRenewal: {
+    backgroundColor: '#E8ECF8',
   },
   kindChipText: {
     fontSize: 10,

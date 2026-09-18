@@ -26,11 +26,6 @@ export function validateAddBankAccountForm(
     errors.ifscCode = 'IFSC code is required';
   }
 
-  if (!values.authorized) {
-    errors.authorized =
-      'Please authorize the penny-drop verification to continue';
-  }
-
   return errors;
 }
 

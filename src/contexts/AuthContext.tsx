@@ -9,6 +9,8 @@ import React, {
 import { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { getMobileVerifiedStatus } from '../services/profileService';
+import { loadPendingRegistration } from '../services/registrationPendingStore';
+import { isUnlockWindowValid } from '../services/sessionUnlockStore';
 import { OtpMode } from '../types/otp';
 
 export type OtpFlow = OtpMode | null;
@@ -17,6 +19,14 @@ type AuthContextValue = {
   session: Session | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  /** 15-day unlock window still valid for this user. */
+  unlockWindowValid: boolean | null;
+  isUnlockLoading: boolean;
+  /**
+   * True after successful MPIN unlock or password login this process.
+   * Resets on cold start so MPIN is required every app open when session is valid.
+   */
+  appUnlocked: boolean;
   mobileVerified: boolean | null;
   isVerificationLoading: boolean;
   otpFlow: OtpFlow;
@@ -24,6 +34,9 @@ type AuthContextValue = {
   setOtpFlow: (flow: OtpFlow) => void;
   clearOtpFlow: () => void;
   setBypassMobileVerification: (value: boolean) => void;
+  markAppUnlocked: () => void;
+  lockApp: () => void;
+  refreshUnlockWindow: () => Promise<boolean | null>;
   refreshMobileVerified: () => Promise<boolean | null>;
 };
 
@@ -32,6 +45,11 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [unlockWindowValid, setUnlockWindowValid] = useState<boolean | null>(
+    null
+  );
+  const [isUnlockLoading, setIsUnlockLoading] = useState(false);
+  const [appUnlocked, setAppUnlocked] = useState(false);
   const [mobileVerified, setMobileVerified] = useState<boolean | null>(null);
   const [isVerificationLoading, setIsVerificationLoading] = useState(false);
   const [otpFlow, setOtpFlowState] = useState<OtpFlow>(null);
@@ -46,6 +64,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const clearOtpFlow = useCallback(() => {
     setOtpFlowState(null);
   }, []);
+
+  const markAppUnlocked = useCallback(() => {
+    setAppUnlocked(true);
+  }, []);
+
+  const lockApp = useCallback(() => {
+    setAppUnlocked(false);
+  }, []);
+
+  const refreshUnlockWindow = useCallback(async () => {
+    const userId = session?.user?.id;
+    if (!userId) {
+      setUnlockWindowValid(null);
+      return null;
+    }
+    setIsUnlockLoading(true);
+    try {
+      const valid = await isUnlockWindowValid(userId);
+      setUnlockWindowValid(valid);
+      return valid;
+    } catch (error) {
+      console.error(
+        'Failed to check unlock window:',
+        error instanceof Error ? error.message : error
+      );
+      setUnlockWindowValid(false);
+      return false;
+    } finally {
+      setIsUnlockLoading(false);
+    }
+  }, [session?.user?.id]);
 
   const loadMobileVerified = useCallback(
     async (userId: string | undefined, showLoading = true) => {
@@ -106,6 +155,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setBypassMobileVerification(false);
         setOtpFlowState(null);
         setMobileVerified(null);
+        setUnlockWindowValid(null);
+        setAppUnlocked(false);
       }
     });
 
@@ -118,6 +169,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     loadMobileVerified(session?.user?.id);
   }, [loadMobileVerified, session?.user?.id]);
+
+  useEffect(() => {
+    const userId = session?.user?.id;
+    if (!userId) {
+      setUnlockWindowValid(null);
+      return;
+    }
+
+    let cancelled = false;
+    setIsUnlockLoading(true);
+    void isUnlockWindowValid(userId)
+      .then((valid) => {
+        if (!cancelled) {
+          setUnlockWindowValid(valid);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setUnlockWindowValid(false);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsUnlockLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user?.id]);
 
   useEffect(() => {
     if (
@@ -139,8 +221,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     otpFlow,
   ]);
 
-  // If the first profile read raced ahead of profile creation (common during
-  // registration), retry once so mobileVerified becomes false instead of null.
+  useEffect(() => {
+    const userId = session?.user?.id;
+    if (
+      !userId ||
+      bypassMobileVerification ||
+      isVerificationLoading ||
+      mobileVerified !== null ||
+      otpFlow !== null
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    void loadPendingRegistration(userId).then((pending) => {
+      if (!cancelled && pending) {
+        setOtpFlowState('registration');
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    session?.user?.id,
+    bypassMobileVerification,
+    isVerificationLoading,
+    mobileVerified,
+    otpFlow,
+  ]);
+
   useEffect(() => {
     const userId = session?.user?.id;
     if (!userId) {
@@ -176,6 +286,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       session,
       isLoading,
       isAuthenticated: Boolean(session),
+      unlockWindowValid,
+      isUnlockLoading,
+      appUnlocked,
       mobileVerified,
       isVerificationLoading,
       otpFlow,
@@ -183,17 +296,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setOtpFlow,
       clearOtpFlow,
       setBypassMobileVerification,
+      markAppUnlocked,
+      lockApp,
+      refreshUnlockWindow,
       refreshMobileVerified,
     }),
     [
       session,
       isLoading,
+      unlockWindowValid,
+      isUnlockLoading,
+      appUnlocked,
       mobileVerified,
       isVerificationLoading,
       otpFlow,
       bypassMobileVerification,
       setOtpFlow,
       clearOtpFlow,
+      markAppUnlocked,
+      lockApp,
+      refreshUnlockWindow,
       refreshMobileVerified,
     ]
   );

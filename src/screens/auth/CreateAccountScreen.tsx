@@ -22,12 +22,13 @@ import FormCheckbox from '../../components/form/FormCheckbox';
 import {
   REGISTRATION_AUTHORIZATION_TEXT,
   REGISTRATION_FORM_DEFAULTS,
+  REGISTRATION_MPIN_HINT,
   REGISTRATION_PASSWORD_HINT,
   REGISTRATION_SECURITY_TEXT,
   RELATIONSHIP_OPTIONS,
 } from '../../data/registrationForm';
 import PasswordInput from '../../components/auth/PasswordInput';
-import { registerUser } from '../../services/registrationService';
+import { beginRegistration } from '../../services/registrationService';
 import { useAuth } from '../../contexts/AuthContext';
 import { detectBankNameFromIfsc } from '../../utils/bankName';
 import { RootStackScreenProps } from '../../navigation/types';
@@ -47,7 +48,6 @@ export default function CreateAccountScreen({ navigation }: Props) {
     setOtpFlow,
     clearOtpFlow,
     setBypassMobileVerification,
-    refreshMobileVerified,
   } = useAuth();
   const [form, setForm] = useState(REGISTRATION_FORM_DEFAULTS);
   const [errors, setErrors] = useState<RegistrationFormErrors>({});
@@ -86,12 +86,11 @@ export default function CreateAccountScreen({ navigation }: Props) {
     setOtpFlow('registration');
 
     try {
-      await registerUser(form);
-      // Profile now exists — refresh so mobileVerified is false, not null.
-      await refreshMobileVerified();
+      const result = await beginRegistration(form);
       navigation.replace('VerifyMobileNumber', {
         mode: 'registration',
         sendOtp: true,
+        mobileNumber: result.mobileNumber,
       });
     } catch (error) {
       clearOtpFlow();
@@ -181,43 +180,13 @@ export default function CreateAccountScreen({ navigation }: Props) {
             error={errors.dateOfBirth}
           />
           <RegistrationTextField
-            label="Address"
+            label="Full Address"
             required
             value={form.address}
             onChangeText={(text) => updateField('address', text)}
             error={errors.address}
-          />
-
-          <View style={styles.row}>
-            <View style={styles.half}>
-              <RegistrationTextField
-                label="City"
-                required
-                value={form.city}
-                onChangeText={(text) => updateField('city', text)}
-                error={errors.city}
-              />
-            </View>
-            <View style={styles.half}>
-              <RegistrationTextField
-                label="State"
-                required
-                value={form.state}
-                onChangeText={(text) => updateField('state', text)}
-                error={errors.state}
-              />
-            </View>
-          </View>
-
-          <RegistrationTextField
-            label="PIN Code"
-            required
-            value={form.pinCode}
-            onChangeText={(text) =>
-              updateField('pinCode', text.replace(/[^\d]/g, ''))
-            }
-            error={errors.pinCode}
-            keyboardType="number-pad"
+            placeholder="House / street, area, city, state, PIN code"
+            multiline
           />
 
           <RegistrationSectionHeader
@@ -323,6 +292,16 @@ export default function CreateAccountScreen({ navigation }: Props) {
             error={errors.bankName}
           />
 
+          <RegistrationTextField
+            label="Branch Name"
+            required
+            value={form.branchName}
+            onChangeText={(text) => updateField('branchName', text)}
+            placeholder="Enter branch name"
+            error={errors.branchName}
+            autoCapitalize="words"
+          />
+
           <RegistrationSectionHeader
             number={4}
             title="Nominee Details"
@@ -358,11 +337,29 @@ export default function CreateAccountScreen({ navigation }: Props) {
             error={errors.nomineeAadhaar}
             keyboardType="number-pad"
           />
+          <RegistrationTextField
+            label="Nominee's Mobile"
+            required
+            value={form.nomineeMobile}
+            onChangeText={(text) => updateField('nomineeMobile', text)}
+            error={errors.nomineeMobile}
+            keyboardType="phone-pad"
+          />
+          <RegistrationTextField
+            label="Nominee's PAN"
+            required
+            value={form.nomineePan}
+            onChangeText={(text) =>
+              updateField('nomineePan', text.toUpperCase())
+            }
+            error={errors.nomineePan}
+            autoCapitalize="characters"
+          />
 
           <RegistrationSectionHeader
             number={5}
-            title="Set Your Password"
-            description="Create a password to sign in to your account"
+            title="Set Password & MPIN"
+            description="Password for sign-in; MPIN to unlock the app on this device"
           />
 
           <PasswordInput
@@ -385,13 +382,49 @@ export default function CreateAccountScreen({ navigation }: Props) {
             onChangeText={(text) => updateField('confirmPassword', text)}
             autoCapitalize="none"
             autoCorrect={false}
-            returnKeyType="done"
+            returnKeyType="next"
           />
           {errors.confirmPassword ? (
             <Text style={styles.fieldError}>{errors.confirmPassword}</Text>
           ) : null}
 
           <Text style={styles.passwordHint}>{REGISTRATION_PASSWORD_HINT}</Text>
+
+          <PasswordInput
+            label="MPIN"
+            required
+            value={form.mpin}
+            onChangeText={(text) =>
+              updateField('mpin', text.replace(/\D/g, '').slice(0, 4))
+            }
+            keyboardType="number-pad"
+            maxLength={4}
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="next"
+          />
+          {errors.mpin ? (
+            <Text style={styles.fieldError}>{errors.mpin}</Text>
+          ) : null}
+
+          <PasswordInput
+            label="Confirm MPIN"
+            required
+            value={form.confirmMpin}
+            onChangeText={(text) =>
+              updateField('confirmMpin', text.replace(/\D/g, '').slice(0, 4))
+            }
+            keyboardType="number-pad"
+            maxLength={4}
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="done"
+          />
+          {errors.confirmMpin ? (
+            <Text style={styles.fieldError}>{errors.confirmMpin}</Text>
+          ) : null}
+
+          <Text style={styles.passwordHint}>{REGISTRATION_MPIN_HINT}</Text>
 
           <FormCheckbox
             checked={form.authorized}
@@ -478,13 +511,6 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     color: colors.successText,
     fontWeight: '500',
-  },
-  row: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  half: {
-    flex: 1,
   },
   fieldError: {
     marginTop: -10,

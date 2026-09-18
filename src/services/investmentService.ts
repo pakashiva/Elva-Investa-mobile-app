@@ -3,6 +3,7 @@ import { AGREEMENT_CHARGES, FUND_AMOUNT_MINIMUM } from '../data/fundRequest';
 import { Investment, InvestmentStatus } from '../types/investment';
 import { mapInvestmentAmounts } from '../utils/investmentFormat';
 import { processUserInvestmentInterest } from './investmentInterestService';
+import { normalizeReferralCodeInput } from './referralService';
 
 export type InvestmentRow = {
   id: string;
@@ -316,7 +317,9 @@ export async function createFundRequest(
       bank_account_id: input.bankAccountId,
       nominee_id: input.nomineeId,
       pay_date: input.payDate,
-      referral_code: input.referralCode?.trim().toUpperCase() || null,
+      referral_code: input.referralCode
+        ? normalizeReferralCodeInput(input.referralCode)
+        : null,
       agreement_charges: AGREEMENT_CHARGES,
       status: 'Pending',
       name: title,

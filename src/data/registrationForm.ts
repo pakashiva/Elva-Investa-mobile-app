@@ -17,9 +17,6 @@ export const REGISTRATION_FORM_DEFAULTS: RegistrationFormValues = {
   emailAddress: '',
   dateOfBirth: '',
   address: '',
-  city: '',
-  state: '',
-  pinCode: '',
   aadhaarNumber: '',
   panNumber: '',
   accountHolderName: '',
@@ -27,17 +24,25 @@ export const REGISTRATION_FORM_DEFAULTS: RegistrationFormValues = {
   confirmAccountNumber: '',
   ifscCode: '',
   bankName: '',
+  branchName: '',
   accountType: 'Savings',
   nomineeName: '',
   relationship: '',
   nomineeAadhaar: '',
+  nomineeMobile: '',
+  nomineePan: '',
   password: '',
   confirmPassword: '',
+  mpin: '',
+  confirmMpin: '',
   authorized: false,
 };
 
 export const REGISTRATION_PASSWORD_HINT =
   'Must be at least 8 characters with 1 uppercase, 1 number & 1 special character';
+
+export const REGISTRATION_MPIN_HINT =
+  'Enter a 4-digit MPIN. You will use this to unlock the app on this device.';
 
 export const REGISTRATION_AUTHORIZATION_TEXT =
   'I agree to the Terms & Conditions and authorize Roxru Financial to conduct secure digital KYC verification using my Aadhaar and PAN details.';

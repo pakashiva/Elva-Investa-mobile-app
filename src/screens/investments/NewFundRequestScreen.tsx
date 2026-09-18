@@ -33,6 +33,7 @@ import {
   validateFundAmount,
 } from '../../services/investmentService';
 import {
+  lookupReferralCode,
   normalizeReferralCodeInput,
   validateReferralCodeForSubmit,
 } from '../../services/referralService';
@@ -68,6 +69,7 @@ export default function NewFundRequestScreen({ navigation }: Props) {
   const [nomineeId, setNomineeId] = useState<string | null>(null);
   const [hasReferralCode, setHasReferralCode] = useState(false);
   const [referralCode, setReferralCode] = useState('');
+  const [referrerName, setReferrerName] = useState<string | null>(null);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [nominees, setNominees] = useState<Nominee[]>([]);
@@ -115,6 +117,33 @@ export default function NewFundRequestScreen({ navigation }: Props) {
   useEffect(() => {
     loadFormOptions();
   }, [loadFormOptions]);
+
+  useEffect(() => {
+    if (!hasReferralCode) {
+      setReferrerName(null);
+      return;
+    }
+
+    const normalized = normalizeReferralCodeInput(referralCode);
+    if (!normalized || normalized.length < 7) {
+      setReferrerName(null);
+      return;
+    }
+
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      void lookupReferralCode(normalized).then((result) => {
+        if (!cancelled) {
+          setReferrerName(result.valid ? result.referrerName : null);
+        }
+      });
+    }, 400);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [hasReferralCode, referralCode]);
 
   const goBackToInvestments = () => {
     if (navigation.canGoBack()) {
@@ -359,15 +388,23 @@ export default function NewFundRequestScreen({ navigation }: Props) {
           />
 
           {hasReferralCode ? (
-            <FormTextField
-              label="Referral Code"
-              placeholder="Enter referral code"
-              value={referralCode}
-              onChangeText={(text) =>
-                setReferralCode(normalizeReferralCodeInput(text))
-              }
-              autoCapitalize="characters"
-            />
+            <View>
+              <FormTextField
+                label="Referral Code"
+                placeholder="e.g. 482913rahulsharma"
+                value={referralCode}
+                onChangeText={(text) =>
+                  setReferralCode(normalizeReferralCodeInput(text))
+                }
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              {referrerName ? (
+                <Text style={styles.referrerName}>
+                  Referrer: {referrerName}
+                </Text>
+              ) : null}
+            </View>
           ) : null}
 
           <PayableInfoBanner
@@ -413,6 +450,13 @@ const styles = StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  referrerName: {
+    marginTop: -8,
+    marginBottom: 12,
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.successText,
   },
   flex: {
     flex: 1,

@@ -6,7 +6,6 @@ export type AddBankAccountFormValues = {
   confirmAccountNumber: string;
   ifscCode: string;
   accountType: BankAccountType;
-  authorized: boolean;
 };
 
 export type AddBankAccountFormErrors = Partial<
@@ -14,8 +13,7 @@ export type AddBankAccountFormErrors = Partial<
     | 'accountHolderName'
     | 'accountNumber'
     | 'confirmAccountNumber'
-    | 'ifscCode'
-    | 'authorized',
+    | 'ifscCode',
     string
   >
 >;

@@ -10,6 +10,8 @@ import {
   validateIndianMobile,
   validatePanNumber,
 } from './indianValidators';
+import { validateMpin } from './validateMpin';
+import { validatePasswordComplexity } from './validatePassword';
 
 function isEmpty(value: string): boolean {
   return !value.trim();
@@ -37,10 +39,7 @@ export function validateRegistrationForm(
   }
 
   if (isEmpty(values.dateOfBirth)) errors.dateOfBirth = 'Date of birth is required';
-  if (isEmpty(values.address)) errors.address = 'Address is required';
-  if (isEmpty(values.city)) errors.city = 'City is required';
-  if (isEmpty(values.state)) errors.state = 'State is required';
-  if (isEmpty(values.pinCode)) errors.pinCode = 'PIN code is required';
+  if (isEmpty(values.address)) errors.address = 'Full address is required';
 
   if (isEmpty(values.aadhaarNumber)) {
     errors.aadhaarNumber = 'Aadhaar card number is required';
@@ -81,6 +80,7 @@ export function validateRegistrationForm(
   }
 
   if (isEmpty(values.bankName)) errors.bankName = 'Bank name is required';
+  if (isEmpty(values.branchName)) errors.branchName = 'Branch name is required';
 
   if (isEmpty(values.nomineeName)) errors.nomineeName = 'Nominee name is required';
   if (isEmpty(values.relationship)) errors.relationship = 'Relationship is required';
@@ -92,16 +92,40 @@ export function validateRegistrationForm(
     if (nomineeAadhaarError) errors.nomineeAadhaar = nomineeAadhaarError;
   }
 
-  if (isEmpty(values.password)) {
-    errors.password = 'Password is required';
-  } else if (values.password.length < 8) {
-    errors.password = 'Password must be at least 8 characters';
+  if (isEmpty(values.nomineeMobile)) {
+    errors.nomineeMobile = "Nominee's mobile number is required";
+  } else {
+    const nomineeMobileError = validateIndianMobile(values.nomineeMobile);
+    if (nomineeMobileError) errors.nomineeMobile = nomineeMobileError;
+  }
+
+  if (isEmpty(values.nomineePan)) {
+    errors.nomineePan = "Nominee's PAN is required";
+  } else {
+    const nomineePanError = validatePanNumber(values.nomineePan);
+    if (nomineePanError) errors.nomineePan = nomineePanError;
+  }
+
+  const passwordError = validatePasswordComplexity(values.password);
+  if (passwordError) {
+    errors.password = passwordError;
   }
 
   if (isEmpty(values.confirmPassword)) {
     errors.confirmPassword = 'Please confirm your password';
   } else if (values.password !== values.confirmPassword) {
     errors.confirmPassword = 'Passwords do not match';
+  }
+
+  const mpinError = validateMpin(values.mpin);
+  if (mpinError) {
+    errors.mpin = mpinError;
+  }
+
+  if (isEmpty(values.confirmMpin)) {
+    errors.confirmMpin = 'Please confirm your MPIN';
+  } else if (values.mpin !== values.confirmMpin) {
+    errors.confirmMpin = 'MPINs do not match';
   }
 
   if (!values.authorized) {

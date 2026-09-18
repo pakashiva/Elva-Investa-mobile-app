@@ -19,7 +19,7 @@ export type NotificationToastPayload = {
   title: string;
   body: string;
   decision: 'approved' | 'rejected';
-  kind: 'investment' | 'withdrawal';
+  kind: 'investment' | 'withdrawal' | 'agreement_renewal';
 };
 
 type Props = {
@@ -143,9 +143,13 @@ export default function NotificationToastBanner({
                     ? approved
                       ? 'arrow-up-circle'
                       : 'close-circle'
-                    : approved
-                      ? 'checkmark-circle'
-                      : 'close-circle'
+                    : toast.kind === 'agreement_renewal'
+                      ? approved
+                        ? 'refresh-circle'
+                        : 'close-circle'
+                      : approved
+                        ? 'checkmark-circle'
+                        : 'close-circle'
                 }
                 size={22}
                 color={approved ? colors.success : colors.danger}

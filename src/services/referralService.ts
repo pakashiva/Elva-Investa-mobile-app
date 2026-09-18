@@ -50,7 +50,19 @@ function mapReferralHistoryRow(row: ReferralHistoryRow): ReferralHistoryItem {
 }
 
 export function normalizeReferralCodeInput(code: string): string {
-  return code.trim().toUpperCase().replace(/\s/g, '');
+  return code.trim().toLowerCase().replace(/\s/g, '');
+}
+
+const LEGACY_REFERRAL_FORMAT = /^[a-z0-9]{8}$/i;
+const NEW_REFERRAL_FORMAT = /^[0-9]{6}[a-z0-9]+$/;
+
+export function isReferralCodeFormatValid(code: string): boolean {
+  const normalized = normalizeReferralCodeInput(code);
+  if (!normalized) return true;
+  return (
+    NEW_REFERRAL_FORMAT.test(normalized) ||
+    LEGACY_REFERRAL_FORMAT.test(normalized)
+  );
 }
 
 export async function getMyReferralCode(): Promise<string> {
@@ -80,9 +92,51 @@ export async function validateReferralCode(code: string): Promise<boolean> {
   return Boolean(data);
 }
 
+export type ReferralLookupResult = {
+  valid: boolean;
+  referrerName: string | null;
+  referralCode: string | null;
+};
+
+export async function lookupReferralCode(
+  code: string
+): Promise<ReferralLookupResult> {
+  const normalized = normalizeReferralCodeInput(code);
+  if (!normalized) {
+    return { valid: true, referrerName: null, referralCode: null };
+  }
+
+  const { data, error } = await supabase.rpc('lookup_referral_code', {
+    p_code: normalized,
+  });
+
+  if (error) {
+    // Fallback if migration 022 not applied yet
+    const ok = await validateReferralCode(normalized);
+    return {
+      valid: ok,
+      referrerName: null,
+      referralCode: ok ? normalized : null,
+    };
+  }
+
+  const row = (data ?? {}) as {
+    valid?: boolean;
+    referrer_name?: string | null;
+    referral_code?: string | null;
+  };
+
+  return {
+    valid: Boolean(row.valid),
+    referrerName: row.referrer_name?.trim() || null,
+    referralCode: row.referral_code?.trim() || null,
+  };
+}
+
 export type ReferralCodeValidationResult = {
   valid: boolean;
   errorMessage?: string;
+  referrerName?: string | null;
 };
 
 export async function validateReferralCodeForSubmit(
@@ -93,23 +147,33 @@ export async function validateReferralCodeForSubmit(
     return { valid: true };
   }
 
-  const ownCode = await getMyReferralCode();
-  if (ownCode && normalized === ownCode) {
-    return {
-      valid: false,
-      errorMessage: 'You cannot use your own referral code.',
-    };
-  }
-
-  const isValid = await validateReferralCode(normalized);
-  if (!isValid) {
+  if (!isReferralCodeFormatValid(normalized)) {
     return {
       valid: false,
       errorMessage: 'Please enter a valid referral code or leave it blank.',
     };
   }
 
-  return { valid: true };
+  const ownCode = await getMyReferralCode();
+  if (
+    ownCode &&
+    normalizeReferralCodeInput(ownCode) === normalized
+  ) {
+    return {
+      valid: false,
+      errorMessage: 'You cannot use your own referral code.',
+    };
+  }
+
+  const lookup = await lookupReferralCode(normalized);
+  if (!lookup.valid) {
+    return {
+      valid: false,
+      errorMessage: 'Please enter a valid referral code or leave it blank.',
+    };
+  }
+
+  return { valid: true, referrerName: lookup.referrerName };
 }
 
 export async function getReferralStats(): Promise<ReferralStats> {

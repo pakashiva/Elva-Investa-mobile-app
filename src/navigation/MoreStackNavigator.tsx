@@ -3,6 +3,10 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import MoreScreen from '../screens/more/MoreScreen';
 import MyBankAccountsScreen from '../screens/more/MyBankAccountsScreen';
 import AddBankAccountScreen from '../screens/more/AddBankAccountScreen';
+import MyNomineesScreen from '../screens/more/MyNomineesScreen';
+import AddNomineeScreen from '../screens/more/AddNomineeScreen';
+import AgreementsScreen from '../screens/more/AgreementsScreen';
+import EarningsScreen from '../screens/more/EarningsScreen';
 import ReferEarnScreen from '../screens/more/ReferEarnScreen';
 import MyProfileScreen from '../screens/more/MyProfileScreen';
 import SettingsScreen from '../screens/more/SettingsScreen';
@@ -26,6 +30,26 @@ export default function MoreStackNavigator() {
       <Stack.Screen
         name="AddBankAccount"
         component={AddBankAccountScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="MyNominees"
+        component={MyNomineesScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="AddNominee"
+        component={AddNomineeScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="Agreements"
+        component={AgreementsScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="Earnings"
+        component={EarningsScreen}
         options={{ animation: 'slide_from_right' }}
       />
       <Stack.Screen

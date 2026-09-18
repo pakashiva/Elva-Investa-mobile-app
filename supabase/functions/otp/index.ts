@@ -83,17 +83,8 @@ function maskMobileNumber(mobile: string): string {
 }
 
 function validatePasswordComplexity(password: string): string | null {
-  if (!password || password.length < 8) {
-    return 'Password must be at least 8 characters.';
-  }
-  if (!/[A-Z]/.test(password)) {
-    return 'Password must contain at least 1 uppercase letter.';
-  }
-  if (!/[0-9]/.test(password)) {
-    return 'Password must contain at least 1 number.';
-  }
-  if (!/[^A-Za-z0-9]/.test(password)) {
-    return 'Password must contain at least 1 special character.';
+  if (!password || !/^\d{4}$/.test(password)) {
+    return 'MPIN must be exactly 4 digits.';
   }
   return null;
 }
@@ -381,7 +372,7 @@ Deno.serve(async (req) => {
 
       const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
         profile.user_id,
-        { password: newPassword }
+        { password: `vt1-${newPassword}` }
       );
 
       if (updateError) {
@@ -433,7 +424,7 @@ Deno.serve(async (req) => {
 
       const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
         profile.user_id,
-        { password: newPassword }
+        { password: `vt1-${newPassword}` }
       );
 
       if (updateError) {

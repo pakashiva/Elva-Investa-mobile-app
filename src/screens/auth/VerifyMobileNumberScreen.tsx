@@ -16,30 +16,37 @@ import OtpVisual from '../../components/auth/OtpVisual';
 import OtpInput from '../../components/auth/OtpInput';
 import PasswordInput from '../../components/auth/PasswordInput';
 import {
+  MPIN_REQUIREMENT_TEXT,
   PASSWORD_REQUIREMENT_TEXT,
   VERIFY_MOBILE_DEFAULTS,
 } from '../../data/verifyMobile';
 import { useAuth } from '../../contexts/AuthContext';
 import { useOtpCountdown } from '../../hooks/useOtpCountdown';
 import {
+  completeMpinReset,
   completePasswordReset,
   resendOtp,
   sendOtp,
   verifyOtp,
 } from '../../services/otpService';
-import { signInWithEmail, signOut } from '../../services/authService';
+import { signInWithEmail, signOut, setOwnMpin } from '../../services/authService';
+import { extendUnlockWindow } from '../../services/sessionUnlockStore';
 import {
   getProfileMobileNumber,
   markMobileVerified,
 } from '../../services/profileService';
+import { completeRegistrationAfterOtp } from '../../services/registrationService';
+import { loadPendingRegistration } from '../../services/registrationPendingStore';
 import { RootStackScreenProps } from '../../navigation/types';
 import { OtpMode } from '../../types/otp';
 import { maskMobileNumber } from '../../utils/phoneNumber';
+import { validateMpin } from '../../utils/validateMpin';
 import { validatePasswordComplexity } from '../../utils/validatePassword';
 import { authColors } from '../../theme/authColors';
 import { colors, spacing } from '../../theme/colors';
 
-const DEFAULT_EXPIRES_IN = 300;
+const DEFAULT_EXPIRES_IN = VERIFY_MOBILE_DEFAULTS.expiresSeconds;
+const RESEND_COOLDOWN_SECONDS = VERIFY_MOBILE_DEFAULTS.resendSeconds;
 
 type Props = RootStackScreenProps<'VerifyMobileNumber'>;
 
@@ -50,48 +57,90 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
     refreshMobileVerified,
     clearOtpFlow,
     setBypassMobileVerification,
+    markAppUnlocked,
+    refreshUnlockWindow,
   } = useAuth();
   const mode: OtpMode = route.params?.mode ?? 'registration';
   const shouldSendOtpOnEntry = route.params?.sendOtp === true;
   const recoveryEmail = route.params?.email?.trim().toLowerCase() ?? '';
+  const routeMobile = route.params?.mobileNumber?.trim() ?? '';
+
+  const isForgotMpin = mode === 'forgotMpin';
+  const isChangeMpin = mode === 'changeMpin';
   const isForgotPassword = mode === 'forgotPassword';
   const isChangePassword = mode === 'changePassword';
-  const isPasswordResetFlow = isForgotPassword || isChangePassword;
+  const isMpinFlow = isForgotMpin || isChangeMpin;
+  const isPasswordFlow = isForgotPassword || isChangePassword;
+  const isCredentialResetFlow = isMpinFlow || isPasswordFlow;
+  const isRegistrationFlow = mode === 'registration';
 
   const [otp, setOtp] = useState(VERIFY_MOBILE_DEFAULTS.otp);
+  const [newMpin, setNewMpin] = useState(VERIFY_MOBILE_DEFAULTS.newMpin);
+  const [confirmMpin, setConfirmMpin] = useState(
+    VERIFY_MOBILE_DEFAULTS.confirmMpin
+  );
   const [newPassword, setNewPassword] = useState(
     VERIFY_MOBILE_DEFAULTS.newPassword
   );
   const [confirmPassword, setConfirmPassword] = useState(
     VERIFY_MOBILE_DEFAULTS.confirmPassword
   );
-  const [maskedMobile, setMaskedMobile] = useState('—');
+  const [pendingMobile, setPendingMobile] = useState(routeMobile);
+  const [maskedMobile, setMaskedMobile] = useState(
+    routeMobile ? maskMobileNumber(routeMobile) : '—'
+  );
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSendingOtp, setIsSendingOtp] = useState(false);
   const [isResendingOtp, setIsResendingOtp] = useState(false);
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
-  const [isResettingPassword, setIsResettingPassword] = useState(false);
+  const [isSavingCredential, setIsSavingCredential] = useState(false);
   const [otpVerified, setOtpVerified] = useState(false);
+  /** Registration: OTP already consumed — retry only finishes DB writes. */
+  const [registrationOtpConsumed, setRegistrationOtpConsumed] = useState(false);
   const [expiresIn, setExpiresIn] = useState(DEFAULT_EXPIRES_IN);
   const initialSendRef = useRef(false);
 
-  const { formatted, canResend, isExpired, reset } = useOtpCountdown(expiresIn);
+  const {
+    formattedExpires,
+    formattedResend,
+    canResend,
+    isExpired,
+    reset,
+  } = useOtpCountdown({
+    expiresInSeconds: expiresIn,
+    resendCooldownSeconds: RESEND_COOLDOWN_SECONDS,
+  });
 
-  const otpOptions = isPasswordResetFlow
-    ? {
-        mode: isChangePassword
-          ? ('changePassword' as const)
-          : ('forgotPassword' as const),
-        email: recoveryEmail,
-      }
-    : { mode: 'registration' as const, userId: session?.user?.id };
+  const otpOptions = isCredentialResetFlow
+    ? { mode, email: recoveryEmail }
+    : {
+        mode: 'registration' as const,
+        userId: session?.user?.id,
+        mobileNumber: pendingMobile || routeMobile || undefined,
+      };
+
+  const headerTitle = isChangeMpin
+    ? 'Change MPIN'
+    : isForgotMpin
+      ? 'Reset MPIN'
+      : isChangePassword
+        ? 'Change Password'
+        : isForgotPassword
+          ? 'Reset Password'
+          : 'Verify Mobile Number';
 
   const loadMobileNumber = useCallback(async () => {
-    if (isPasswordResetFlow) {
+    if (isCredentialResetFlow) {
       if (!recoveryEmail) {
         setErrorMessage('Registered email address is required.');
       }
+      return;
+    }
+
+    if (routeMobile) {
+      setPendingMobile(routeMobile);
+      setMaskedMobile(maskMobileNumber(routeMobile));
       return;
     }
 
@@ -104,11 +153,19 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
     }
 
     try {
+      const pending = await loadPendingRegistration(userId);
+      if (pending?.mobileNumber) {
+        setPendingMobile(pending.mobileNumber);
+        setMaskedMobile(maskMobileNumber(pending.mobileNumber));
+        return;
+      }
+
       const mobileNumber = await getProfileMobileNumber(userId);
       if (!mobileNumber) {
         setErrorMessage('Registered mobile number not found.');
         return;
       }
+      setPendingMobile(mobileNumber);
       setMaskedMobile(maskMobileNumber(mobileNumber));
     } catch (error) {
       const message =
@@ -117,18 +174,23 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
           : 'Failed to load mobile number.';
       setErrorMessage(message);
     }
-  }, [isPasswordResetFlow, recoveryEmail, session?.user?.id]);
+  }, [isCredentialResetFlow, recoveryEmail, routeMobile, session?.user?.id]);
 
   const handleSendOtp = useCallback(async () => {
-    if (isPasswordResetFlow && !recoveryEmail) {
+    if (isCredentialResetFlow && !recoveryEmail) {
       setErrorMessage('Registered email address is required.');
       return;
     }
 
-    if (!isPasswordResetFlow && !session?.user?.id) {
+    if (!isCredentialResetFlow && !session?.user?.id) {
       setErrorMessage(
         'Please complete registration before verifying your mobile number.'
       );
+      return;
+    }
+
+    if (isRegistrationFlow && !(pendingMobile || routeMobile)) {
+      setErrorMessage('Registered mobile number not found.');
       return;
     }
 
@@ -140,7 +202,7 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
       const response = await sendOtp(otpOptions);
       const nextExpiresIn = response.expiresIn ?? DEFAULT_EXPIRES_IN;
       setExpiresIn(nextExpiresIn);
-      reset(nextExpiresIn);
+      reset(nextExpiresIn, RESEND_COOLDOWN_SECONDS);
       setStatusMessage(response.message);
       if (response.maskedPhone) {
         setMaskedMobile(response.maskedPhone);
@@ -153,10 +215,13 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
       setIsSendingOtp(false);
     }
   }, [
-    isPasswordResetFlow,
+    isCredentialResetFlow,
+    isRegistrationFlow,
     otpOptions,
+    pendingMobile,
     recoveryEmail,
     reset,
+    routeMobile,
     session?.user?.id,
   ]);
 
@@ -169,12 +234,14 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
       return;
     }
 
-    if (isPasswordResetFlow) {
+    if (isCredentialResetFlow) {
       if (!recoveryEmail) {
         setErrorMessage('Registered email address is required.');
         return;
       }
     } else if (!session?.user?.id) {
+      return;
+    } else if (!(pendingMobile || routeMobile)) {
       return;
     }
 
@@ -183,9 +250,11 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
   }, [
     shouldSendOtpOnEntry,
     handleSendOtp,
-    isPasswordResetFlow,
+    isCredentialResetFlow,
     recoveryEmail,
     session?.user?.id,
+    pendingMobile,
+    routeMobile,
   ]);
 
   const handleResendOtp = async () => {
@@ -196,12 +265,13 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
     setIsResendingOtp(true);
     setErrorMessage(null);
     setOtpVerified(false);
+    setRegistrationOtpConsumed(false);
 
     try {
       const response = await resendOtp(otpOptions);
       const nextExpiresIn = response.expiresIn ?? DEFAULT_EXPIRES_IN;
       setExpiresIn(nextExpiresIn);
-      reset(nextExpiresIn);
+      reset(nextExpiresIn, RESEND_COOLDOWN_SECONDS);
       setOtp('');
       setStatusMessage(response.message);
       if (response.maskedPhone) {
@@ -221,13 +291,13 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
       return;
     }
 
-    if (isExpired) {
+    if (isExpired && !registrationOtpConsumed) {
       setErrorMessage('OTP has expired. Please resend OTP.');
       return;
     }
 
     const cleanedOtp = otp.replace(/\D/g, '');
-    if (!/^\d{6}$/.test(cleanedOtp)) {
+    if (!registrationOtpConsumed && !/^\d{6}$/.test(cleanedOtp)) {
       setErrorMessage('Please enter the 6-digit OTP.');
       return;
     }
@@ -235,24 +305,44 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
     setIsVerifyingOtp(true);
     setErrorMessage(null);
 
-    try {
-      const response = await verifyOtp(cleanedOtp, otpOptions);
+    let otpAlreadyConsumed = registrationOtpConsumed;
 
-      if (isPasswordResetFlow) {
+    try {
+      let statusText = 'OTP verified successfully.';
+
+      if (isCredentialResetFlow) {
+        const response = await verifyOtp(cleanedOtp, otpOptions);
         setOtpVerified(true);
         setStatusMessage(response.message);
         return;
       }
 
+      if (!otpAlreadyConsumed) {
+        const response = await verifyOtp(cleanedOtp, otpOptions);
+        statusText = response.message;
+        otpAlreadyConsumed = true;
+        setRegistrationOtpConsumed(true);
+      }
+
+      const userId = session?.user?.id;
+      if (!userId) {
+        throw new Error('Session expired. Please register again.');
+      }
+
+      await completeRegistrationAfterOtp(userId);
+
       try {
         await markMobileVerified();
       } catch {
-        // Edge function may have already updated mobile_verified.
+        // Profile may already have mobile_verified = true.
       }
 
+      await extendUnlockWindow(userId);
+      await refreshUnlockWindow();
       await refreshMobileVerified();
       clearOtpFlow();
-      setStatusMessage(response.message);
+      markAppUnlocked();
+      setStatusMessage(statusText);
       navigation.reset({
         index: 0,
         routes: [{ name: 'MainTabs' }],
@@ -260,14 +350,85 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'OTP verification failed.';
-      setErrorMessage(message);
+      if (otpAlreadyConsumed && isRegistrationFlow) {
+        setErrorMessage(
+          `${message}\n\nYour OTP was already accepted. Tap Verify OTP again to finish saving your account — no new code needed.`
+        );
+      } else {
+        setErrorMessage(message);
+      }
     } finally {
       setIsVerifyingOtp(false);
     }
   };
 
+  const handleSetMpinAndContinue = async () => {
+    if (!isMpinFlow || isSavingCredential) {
+      return;
+    }
+
+    if (!otpVerified) {
+      setErrorMessage('Please verify the OTP before setting a new MPIN.');
+      return;
+    }
+
+    const mpinError = validateMpin(newMpin);
+    if (mpinError) {
+      setErrorMessage(mpinError);
+      return;
+    }
+
+    if (newMpin !== confirmMpin) {
+      setErrorMessage('MPINs do not match.');
+      return;
+    }
+
+    setIsSavingCredential(true);
+    setErrorMessage(null);
+
+    try {
+      if (isChangeMpin && session?.user?.id) {
+        await setOwnMpin(newMpin);
+        await extendUnlockWindow(session.user.id);
+        await refreshUnlockWindow();
+        clearOtpFlow();
+        markAppUnlocked();
+        setStatusMessage('MPIN updated successfully.');
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'MainTabs' }],
+        });
+        return;
+      }
+
+      await completeMpinReset(recoveryEmail, newMpin);
+      clearOtpFlow();
+
+      if (session?.user?.id) {
+        await extendUnlockWindow(session.user.id);
+        await refreshUnlockWindow();
+        markAppUnlocked();
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'MainTabs' }],
+        });
+      } else {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'SignIn' }],
+        });
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Failed to reset MPIN.';
+      setErrorMessage(message);
+    } finally {
+      setIsSavingCredential(false);
+    }
+  };
+
   const handleSetPasswordAndContinue = async () => {
-    if (!isPasswordResetFlow || isResettingPassword) {
+    if (!isPasswordFlow || isSavingCredential) {
       return;
     }
 
@@ -287,7 +448,7 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
       return;
     }
 
-    setIsResettingPassword(true);
+    setIsSavingCredential(true);
     setErrorMessage(null);
 
     try {
@@ -295,6 +456,8 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
       setBypassMobileVerification(true);
       clearOtpFlow();
       await signInWithEmail(recoveryEmail, newPassword);
+      await refreshUnlockWindow();
+      markAppUnlocked();
       setStatusMessage(response.message);
       navigation.reset({
         index: 0,
@@ -305,12 +468,12 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
         error instanceof Error ? error.message : 'Failed to reset password.';
       setErrorMessage(message);
     } finally {
-      setIsResettingPassword(false);
+      setIsSavingCredential(false);
     }
   };
 
   const handleBack = async () => {
-    if (isChangePassword && session) {
+    if ((isChangeMpin || isChangePassword) && session) {
       clearOtpFlow();
       navigation.reset({
         index: 0,
@@ -319,7 +482,16 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
       return;
     }
 
-    if (!isPasswordResetFlow && session) {
+    if (isForgotMpin && session) {
+      clearOtpFlow();
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'MpinLock' }],
+      });
+      return;
+    }
+
+    if (!isCredentialResetFlow && session) {
       await signOut();
     }
 
@@ -333,11 +505,13 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
   const verifyDisabled =
     isVerifyingOtp ||
     isSendingOtp ||
-    isExpired ||
-    otp.replace(/\D/g, '').length !== 6;
+    (!registrationOtpConsumed && isExpired) ||
+    (!registrationOtpConsumed && otp.replace(/\D/g, '').length !== 6);
 
+  const mpinContinueDisabled =
+    isSavingCredential || !otpVerified || !newMpin || !confirmMpin;
   const passwordContinueDisabled =
-    isResettingPassword || !otpVerified || !newPassword || !confirmPassword;
+    isSavingCredential || !otpVerified || !newPassword || !confirmPassword;
 
   return (
     <View style={styles.safe}>
@@ -351,13 +525,7 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
         >
           <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>
-          {isChangePassword
-            ? 'Change Password'
-            : isForgotPassword
-              ? 'Reset Password'
-              : 'Verify Mobile Number'}
-        </Text>
+        <Text style={styles.headerTitle}>{headerTitle}</Text>
       </View>
 
       <KeyboardAvoidingView
@@ -422,7 +590,7 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
               ) : (
                 <>
                   OTP expires in{' '}
-                  <Text style={styles.resendBold}>{formatted}</Text>
+                  <Text style={styles.resendBold}>{formattedExpires}</Text>
                 </>
               )}
             </Text>
@@ -442,7 +610,11 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
                     styles.resendLinkDisabled,
                 ]}
               >
-                {isResendingOtp ? 'Resending...' : 'Resend OTP'}
+                {isResendingOtp
+                  ? 'Resending...'
+                  : canResend
+                    ? 'Resend OTP'
+                    : `Resend in ${formattedResend}`}
               </Text>
             </TouchableOpacity>
           </View>
@@ -463,7 +635,63 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
             )}
           </TouchableOpacity>
 
-          {isPasswordResetFlow && otpVerified ? (
+          {isMpinFlow && otpVerified ? (
+            <View style={styles.passwordSection}>
+              <Text style={styles.passwordHeading}>
+                {isChangeMpin ? 'Set New MPIN' : 'Set Your MPIN'}
+              </Text>
+
+              <PasswordInput
+                label="New MPIN"
+                required
+                value={newMpin}
+                onChangeText={(text) =>
+                  setNewMpin(text.replace(/\D/g, '').slice(0, 4))
+                }
+                keyboardType="number-pad"
+                maxLength={4}
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="next"
+              />
+
+              <PasswordInput
+                label="Confirm MPIN"
+                required
+                value={confirmMpin}
+                onChangeText={(text) =>
+                  setConfirmMpin(text.replace(/\D/g, '').slice(0, 4))
+                }
+                keyboardType="number-pad"
+                maxLength={4}
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="done"
+              />
+
+              <Text style={styles.passwordHint}>{MPIN_REQUIREMENT_TEXT}</Text>
+
+              <TouchableOpacity
+                style={[
+                  styles.primaryBtn,
+                  mpinContinueDisabled && styles.primaryBtnDisabled,
+                ]}
+                activeOpacity={0.85}
+                onPress={handleSetMpinAndContinue}
+                disabled={mpinContinueDisabled}
+              >
+                {isSavingCredential ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.primaryBtnText}>
+                    {isChangeMpin ? 'Update MPIN' : 'Set MPIN & Continue'}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          ) : null}
+
+          {isPasswordFlow && otpVerified ? (
             <View style={styles.passwordSection}>
               <Text style={styles.passwordHeading}>
                 {isChangePassword ? 'Set New Password' : 'Set Your Password'}
@@ -489,7 +717,9 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
                 returnKeyType="done"
               />
 
-              <Text style={styles.passwordHint}>{PASSWORD_REQUIREMENT_TEXT}</Text>
+              <Text style={styles.passwordHint}>
+                {PASSWORD_REQUIREMENT_TEXT}
+              </Text>
 
               <TouchableOpacity
                 style={[
@@ -500,7 +730,7 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
                 onPress={handleSetPasswordAndContinue}
                 disabled={passwordContinueDisabled}
               >
-                {isResettingPassword ? (
+                {isSavingCredential ? (
                   <ActivityIndicator color="#FFFFFF" />
                 ) : (
                   <Text style={styles.primaryBtnText}>

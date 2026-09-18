@@ -1,13 +1,12 @@
 import React, { useEffect } from 'react';
 import { ActivityIndicator, View, StyleSheet } from 'react-native';
-import {
-  NavigationContainer,
-} from '@react-navigation/native';
+import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../contexts/AuthContext';
 import MainTabNavigator from './MainTabNavigator';
 import SplashScreen from '../screens/auth/SplashScreen';
 import SignInScreen from '../screens/auth/SignInScreen';
+import MpinLockScreen from '../screens/auth/MpinLockScreen';
 import CreateAccountScreen from '../screens/auth/CreateAccountScreen';
 import VerifyMobileNumberScreen from '../screens/auth/VerifyMobileNumberScreen';
 import NotificationsScreen from '../screens/notifications/NotificationsScreen';
@@ -17,6 +16,13 @@ import { colors } from '../theme/colors';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 export { navigationRef };
+
+const OTP_RECOVERY_MODES = new Set([
+  'forgotMpin',
+  'changeMpin',
+  'forgotPassword',
+  'changePassword',
+]);
 
 function LoadingScreen() {
   return (
@@ -34,6 +40,9 @@ function AuthNavigationHandler() {
     isVerificationLoading,
     otpFlow,
     bypassMobileVerification,
+    unlockWindowValid,
+    isUnlockLoading,
+    appUnlocked,
   } = useAuth();
 
   useEffect(() => {
@@ -49,6 +58,7 @@ function AuthNavigationHandler() {
     const authRoutes = new Set([
       'Splash',
       'SignIn',
+      'MpinLock',
       'CreateAccount',
       'VerifyMobileNumber',
     ]);
@@ -57,16 +67,17 @@ function AuthNavigationHandler() {
       return;
     }
 
+    const onRecoveryOtp =
+      currentRoute === 'VerifyMobileNumber' &&
+      currentParams?.mode != null &&
+      OTP_RECOVERY_MODES.has(currentParams.mode);
+
     if (!session) {
-      if (
-        currentRoute === 'VerifyMobileNumber' &&
-        (currentParams?.mode === 'forgotPassword' ||
-          currentParams?.mode === 'changePassword')
-      ) {
+      if (onRecoveryOtp) {
         return;
       }
 
-      if (!currentRoute || !authRoutes.has(currentRoute)) {
+      if (!currentRoute || !authRoutes.has(currentRoute) || currentRoute === 'MpinLock') {
         navigationRef.reset({
           index: 0,
           routes: [{ name: 'SignIn' }],
@@ -75,16 +86,12 @@ function AuthNavigationHandler() {
       return;
     }
 
-    if (
-      currentRoute === 'VerifyMobileNumber' &&
-      (currentParams?.mode === 'forgotPassword' ||
-        currentParams?.mode === 'changePassword')
-    ) {
+    if (onRecoveryOtp) {
       return;
     }
 
     if (bypassMobileVerification) {
-      if (currentRoute && authRoutes.has(currentRoute)) {
+      if (currentRoute && authRoutes.has(currentRoute) && appUnlocked) {
         navigationRef.reset({
           index: 0,
           routes: [{ name: 'MainTabs' }],
@@ -114,12 +121,37 @@ function AuthNavigationHandler() {
       return;
     }
 
-    // Profile status still loading — stay on the current screen.
-    if (isVerificationLoading || mobileVerified === null) {
+    if (isVerificationLoading || mobileVerified === null || isUnlockLoading) {
       return;
     }
 
-    if (currentRoute && authRoutes.has(currentRoute)) {
+    if (unlockWindowValid === null) {
+      return;
+    }
+
+    // Unlock window expired → full credential login (keep session until they sign in again).
+    if (unlockWindowValid === false) {
+      if (currentRoute !== 'SignIn' && currentRoute !== 'CreateAccount') {
+        navigationRef.reset({
+          index: 0,
+          routes: [{ name: 'SignIn' }],
+        });
+      }
+      return;
+    }
+
+    // Valid session + unlock window → MPIN every cold start until unlocked.
+    if (unlockWindowValid === true && !appUnlocked) {
+      if (currentRoute !== 'MpinLock') {
+        navigationRef.reset({
+          index: 0,
+          routes: [{ name: 'MpinLock' }],
+        });
+      }
+      return;
+    }
+
+    if (currentRoute && authRoutes.has(currentRoute) && appUnlocked) {
       navigationRef.reset({
         index: 0,
         routes: [{ name: 'MainTabs' }],
@@ -132,6 +164,9 @@ function AuthNavigationHandler() {
     isVerificationLoading,
     otpFlow,
     bypassMobileVerification,
+    unlockWindowValid,
+    isUnlockLoading,
+    appUnlocked,
   ]);
 
   return null;
@@ -140,9 +175,6 @@ function AuthNavigationHandler() {
 export default function RootNavigator() {
   const { isLoading } = useAuth();
 
-  // Only block the tree while restoring the auth session.
-  // Never unmount NavigationContainer during registration OTP —
-  // that was leaving users stuck on a blank spinner.
   if (isLoading) {
     return <LoadingScreen />;
   }
@@ -157,6 +189,7 @@ export default function RootNavigator() {
         <Stack.Screen name="Splash" component={SplashScreen} />
         <Stack.Screen name="MainTabs" component={MainTabNavigator} />
         <Stack.Screen name="SignIn" component={SignInScreen} />
+        <Stack.Screen name="MpinLock" component={MpinLockScreen} />
         <Stack.Screen
           name="CreateAccount"
           component={CreateAccountScreen}

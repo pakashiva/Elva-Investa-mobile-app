@@ -17,11 +17,9 @@ export type Database = {
           email_address: string;
           date_of_birth: string;
           address: string;
-          city: string;
-          state: string;
-          pin_code: string;
           authorized: boolean;
           mobile_verified: boolean;
+          mpin_hash: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -32,11 +30,9 @@ export type Database = {
           email_address: string;
           date_of_birth: string;
           address: string;
-          city: string;
-          state: string;
-          pin_code: string;
           authorized: boolean;
           mobile_verified?: boolean;
+          mpin_hash?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -63,9 +59,6 @@ export type Database = {
           user_id: string;
           aadhaar_number: string;
           pan_number: string;
-          aadhaar_front_path: string | null;
-          aadhaar_back_path: string | null;
-          pan_card_path: string | null;
           created_at: string;
         };
         Insert: {
@@ -73,9 +66,6 @@ export type Database = {
           user_id: string;
           aadhaar_number: string;
           pan_number: string;
-          aadhaar_front_path?: string | null;
-          aadhaar_back_path?: string | null;
-          pan_card_path?: string | null;
           created_at?: string;
         };
         Update: Partial<Database['public']['Tables']['kyc_documents']['Insert']>;
@@ -89,6 +79,7 @@ export type Database = {
           account_number: string;
           ifsc_code: string;
           bank_name: string;
+          branch_name: string | null;
           account_type: string;
           is_primary: boolean;
           created_at: string;
@@ -100,6 +91,7 @@ export type Database = {
           account_number: string;
           ifsc_code: string;
           bank_name: string;
+          branch_name?: string | null;
           account_type?: string;
           is_primary?: boolean;
           created_at?: string;
@@ -114,6 +106,8 @@ export type Database = {
           nominee_name: string;
           relationship: string;
           nominee_aadhaar: string;
+          nominee_mobile: string | null;
+          nominee_pan: string | null;
           created_at: string;
         };
         Insert: {
@@ -122,9 +116,43 @@ export type Database = {
           nominee_name: string;
           relationship: string;
           nominee_aadhaar: string;
+          nominee_mobile?: string | null;
+          nominee_pan?: string | null;
           created_at?: string;
         };
         Update: Partial<Database['public']['Tables']['nominees']['Insert']>;
+        Relationships: [];
+      };
+      agreement_renewal_requests: {
+        Row: {
+          id: string;
+          investment_id: string;
+          user_id: string;
+          agreement_id: string;
+          customer_id: string;
+          current_amount: number;
+          increment_amount: number | null;
+          mode: 'same_amount' | 'increase';
+          status: 'Pending' | 'Approved' | 'Rejected';
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          investment_id: string;
+          user_id: string;
+          agreement_id: string;
+          customer_id: string;
+          current_amount: number;
+          increment_amount?: number | null;
+          mode: 'same_amount' | 'increase';
+          status?: 'Pending' | 'Approved' | 'Rejected';
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<
+          Database['public']['Tables']['agreement_renewal_requests']['Insert']
+        >;
         Relationships: [];
       };
       notifications: {
@@ -416,6 +444,18 @@ export type Database = {
         Args: { p_email: string; p_new_password: string };
         Returns: undefined;
       };
+      complete_mpin_recovery: {
+        Args: { p_email: string; p_new_mpin: string };
+        Returns: undefined;
+      };
+      set_own_mpin: {
+        Args: { p_mpin: string };
+        Returns: undefined;
+      };
+      verify_own_mpin: {
+        Args: { p_mpin: string };
+        Returns: boolean;
+      };
       get_my_referral_code: {
         Args: Record<string, never>;
         Returns: string;
@@ -423,6 +463,10 @@ export type Database = {
       validate_referral_code: {
         Args: { p_code: string };
         Returns: boolean;
+      };
+      lookup_referral_code: {
+        Args: { p_code: string };
+        Returns: Json;
       };
       get_my_referral_stats: {
         Args: Record<string, never>;

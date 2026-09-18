@@ -7,7 +7,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -17,7 +16,10 @@ import { BRAND_NAME, BRAND_TAGLINE } from '../../constants/brandAssets';
 import SignInTextField from '../../components/auth/SignInTextField';
 import { SIGN_IN_DEFAULTS } from '../../data/auth';
 import { useAuth } from '../../contexts/AuthContext';
-import { signInWithMobileOrEmail, resolveLoginEmail } from '../../services/authService';
+import {
+  signInWithMobileOrEmail,
+  resolveLoginEmail,
+} from '../../services/authService';
 import { RootStackScreenProps } from '../../navigation/types';
 import { authColors } from '../../theme/authColors';
 
@@ -25,7 +27,12 @@ type Props = RootStackScreenProps<'SignIn'>;
 
 export default function SignInScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
-  const { setBypassMobileVerification, clearOtpFlow } = useAuth();
+  const {
+    setBypassMobileVerification,
+    clearOtpFlow,
+    markAppUnlocked,
+    refreshUnlockWindow,
+  } = useAuth();
   const [mobileOrEmail, setMobileOrEmail] = useState(
     SIGN_IN_DEFAULTS.mobileOrEmail
   );
@@ -34,8 +41,12 @@ export default function SignInScreen({ navigation }: Props) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleSignIn = async () => {
-    if (!mobileOrEmail.trim() || !password) {
-      setErrorMessage('Please enter your mobile number or email, and password.');
+    if (!mobileOrEmail.trim()) {
+      setErrorMessage('Enter your mobile number or email.');
+      return;
+    }
+    if (!password) {
+      setErrorMessage('Enter your password.');
       return;
     }
 
@@ -46,6 +57,8 @@ export default function SignInScreen({ navigation }: Props) {
 
     try {
       await signInWithMobileOrEmail(mobileOrEmail, password);
+      await refreshUnlockWindow();
+      markAppUnlocked();
       navigation.reset({
         index: 0,
         routes: [{ name: 'MainTabs' }],
@@ -61,9 +74,7 @@ export default function SignInScreen({ navigation }: Props) {
   };
 
   const handleForgotPassword = async () => {
-    const input = mobileOrEmail.trim();
-
-    if (!input) {
+    if (!mobileOrEmail.trim()) {
       setErrorMessage('Enter your registered mobile number or email first.');
       return;
     }
@@ -72,7 +83,7 @@ export default function SignInScreen({ navigation }: Props) {
     clearOtpFlow();
 
     try {
-      const email = await resolveLoginEmail(input);
+      const email = await resolveLoginEmail(mobileOrEmail);
       navigation.navigate('VerifyMobileNumber', {
         mode: 'forgotPassword',
         email,
@@ -109,14 +120,14 @@ export default function SignInScreen({ navigation }: Props) {
         >
           <Text style={styles.welcome}>Welcome</Text>
           <Text style={styles.welcomeSubtitle}>
-            Sign in to manage your investments
+            Sign in with your mobile number or email and password
           </Text>
 
           <SignInTextField
-            label="Mobile Number / Email"
+            label="Mobile Number or Email"
             value={mobileOrEmail}
             onChangeText={setMobileOrEmail}
-            placeholder="Enter your mobile or email"
+            placeholder="10-digit mobile or email"
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="email-address"
@@ -127,6 +138,7 @@ export default function SignInScreen({ navigation }: Props) {
             label="Password"
             value={password}
             onChangeText={setPassword}
+            placeholder="Enter your password"
             secureTextEntry
             returnKeyType="done"
             onSubmitEditing={handleSignIn}
@@ -153,7 +165,9 @@ export default function SignInScreen({ navigation }: Props) {
             )}
           </TouchableOpacity>
 
-          {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+          {errorMessage ? (
+            <Text style={styles.errorText}>{errorMessage}</Text>
+          ) : null}
 
           <View style={styles.orRow}>
             <View style={styles.orLine} />

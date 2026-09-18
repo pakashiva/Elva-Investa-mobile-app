@@ -39,9 +39,15 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
       },
       {
         id: 'account-4',
+        question: 'What should I do if I forget my MPIN?',
+        answer:
+          'On the MPIN unlock screen, tap Forgot MPIN, verify the OTP sent to your registered mobile, and set a new 4-digit MPIN. You can then unlock the app with the new MPIN.',
+      },
+      {
+        id: 'account-5',
         question: 'What should I do if I forget my password?',
         answer:
-          'On the Sign In screen, tap Forgot Password, enter your registered mobile number, verify the OTP, and set a new password. You can then sign in with the updated credentials.',
+          'On the Sign In screen, enter your registered mobile number or email, tap Forgot Password, verify the OTP, and set a new password. You can then sign in with mobile/email and the new password.',
       },
     ],
   },
@@ -190,7 +196,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
         id: 'referrals-1',
         question: 'How does the referral program work?',
         answer:
-          'Share your unique 8-character referral code from More → Referrals. When someone invests using your code and their fund becomes Active, you earn a referral bonus on their investment amount.',
+          'Share your unique referral code from More → Referrals (6 digits followed by your name, for example 482913rahulsharma). When someone invests using your code and their fund becomes Active, you earn a referral bonus on their investment amount.',
       },
       {
         id: 'referrals-2',
@@ -227,7 +233,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
         id: 'security-2',
         question: 'Why am I asked to sign in again?',
         answer:
-          'For security, sessions may expire after a period of inactivity or after password changes. Sign in again with your registered credentials to continue.',
+          'For security, full sign-in (mobile or email + password) is required when your 15-day unlock window expires. While the window is valid, each app open asks for your MPIN to unlock.',
       },
       {
         id: 'security-3',

@@ -84,9 +84,6 @@ async function createRegisteredUser(prefix, fullName, email) {
     user_id: userId,
     aadhaar_number: '123456789012',
     pan_number: `${prefix}PAN1234F`,
-    aadhaar_front_path: `${userId}/aadhaar_front.jpg`,
-    aadhaar_back_path: `${userId}/aadhaar_back.jpg`,
-    pan_card_path: `${userId}/pan_card.jpg`,
   });
 
   return { userId, email, password, fullName, panNumber: `${prefix}PAN1234F` };

@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
   Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -28,8 +27,8 @@ import {
   MainTabParamList,
   MoreStackParamList,
 } from '../../navigation/types';
-import { navigateToSignIn } from '../../utils/authNavigation';
-import { signOut } from '../../services/authService';
+import { navigateToMpinLock } from '../../utils/authNavigation';
+import { useAuth } from '../../contexts/AuthContext';
 import { colors, spacing } from '../../theme/colors';
 
 type Nav = CompositeNavigationProp<
@@ -48,6 +47,12 @@ function menuPressHandler(itemId: string, navigation: Nav) {
         });
     case 'bankDetails':
       return () => navigation.navigate('MyBankAccounts');
+    case 'nominees':
+      return () => navigation.navigate('MyNominees');
+    case 'agreements':
+      return () => navigation.navigate('Agreements');
+    case 'earnings':
+      return () => navigation.navigate('Earnings');
     case 'transactions':
       return () => navigation.navigate('Transactions');
     case 'referrals':
@@ -68,16 +73,13 @@ function menuPressHandler(itemId: string, navigation: Nav) {
 export default function MoreScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<Nav>();
+  const { lockApp } = useAuth();
 
-  const handleLogout = async () => {
-    try {
-      await signOut();
-      navigateToSignIn(navigation);
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Unable to log out right now.';
-      Alert.alert('Logout failed', message);
-    }
+  const handleLogout = () => {
+    // Keep Auth session + 15-day unlock window; require MPIN to re-enter.
+    // Full password sign-in is available from MPIN screen ("Sign in with password").
+    lockApp();
+    navigateToMpinLock(navigation);
   };
 
   return (

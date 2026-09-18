@@ -4,6 +4,9 @@ export type MenuItemId =
   | 'accountOverview'
   | 'myInvestments'
   | 'bankDetails'
+  | 'nominees'
+  | 'agreements'
+  | 'earnings'
   | 'transactions'
   | 'referrals'
   | 'profile'
@@ -22,6 +25,9 @@ export const MENU_ITEMS: MenuItem[] = [
   { id: 'accountOverview', label: 'Account Overview', icon: 'grid-outline' },
   { id: 'myInvestments', label: 'My Investments', icon: 'trending-up-outline' },
   { id: 'bankDetails', label: 'Bank Details', icon: 'card-outline' },
+  { id: 'nominees', label: 'Nominees', icon: 'people-outline' },
+  { id: 'agreements', label: 'Agreements', icon: 'document-text-outline' },
+  { id: 'earnings', label: 'Earnings', icon: 'wallet-outline' },
   { id: 'transactions', label: 'Transactions', icon: 'pulse-outline' },
   { id: 'referrals', label: 'Referrals', icon: 'gift-outline' },
   { id: 'profile', label: 'Profile', icon: 'person-outline' },

@@ -121,7 +121,16 @@ export default function MyInvestmentsScreen() {
                   <Text style={styles.addBtnText}>Add New</Text>
                 </TouchableOpacity>
 
-                <ProfileAvatar source={avatarSource} size={36} showChevron />
+                <ProfileAvatar
+                  source={avatarSource}
+                  size={36}
+                  showChevron
+                  onPress={() =>
+                    navigation.getParent()?.navigate('More', {
+                      screen: 'MyProfile',
+                    })
+                  }
+                />
               </View>
             </View>
 

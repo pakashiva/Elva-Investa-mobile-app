@@ -166,7 +166,16 @@ export default function WithdrawalsScreen() {
                   />
                   {hasUnread ? <View style={styles.notifBadge} /> : null}
                 </TouchableOpacity>
-                <ProfileAvatar source={avatarSource} size={36} showChevron />
+                <ProfileAvatar
+                  source={avatarSource}
+                  size={36}
+                  showChevron
+                  onPress={() =>
+                    navigation.getParent()?.navigate('More', {
+                      screen: 'MyProfile',
+                    })
+                  }
+                />
               </View>
             </View>
 

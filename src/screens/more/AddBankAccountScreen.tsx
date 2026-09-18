@@ -14,7 +14,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import BankFormField from '../../components/bank/BankFormField';
 import AccountTypeSelector from '../../components/bank/AccountTypeSelector';
-import FormCheckbox from '../../components/form/FormCheckbox';
 import { useAuth } from '../../contexts/AuthContext';
 import { ADD_BANK_ACCOUNT_DEFAULTS } from '../../data/bankAccountForm';
 import { createBankAccount } from '../../services/bankAccountService';
@@ -44,9 +43,6 @@ export default function AddBankAccountScreen({ navigation }: Props) {
   const [ifscCode, setIfscCode] = useState(ADD_BANK_ACCOUNT_DEFAULTS.ifscCode);
   const [accountType, setAccountType] = useState<BankAccountType>(
     ADD_BANK_ACCOUNT_DEFAULTS.accountType
-  );
-  const [authorized, setAuthorized] = useState(
-    ADD_BANK_ACCOUNT_DEFAULTS.authorized
   );
   const [errors, setErrors] = useState<AddBankAccountFormErrors>({});
   const [submitted, setSubmitted] = useState(false);
@@ -80,7 +76,6 @@ export default function AddBankAccountScreen({ navigation }: Props) {
       confirmAccountNumber,
       ifscCode,
       accountType,
-      authorized,
     });
     setErrors(nextErrors);
 
@@ -208,20 +203,6 @@ export default function AddBankAccountScreen({ navigation }: Props) {
 
           <AccountTypeSelector value={accountType} onChange={setAccountType} />
 
-          <FormCheckbox
-            checked={authorized}
-            onChange={(next) => {
-              setAuthorized(next);
-              clearFieldError('authorized');
-            }}
-            checkedColor={colors.primary}
-            labelColor={colors.primary}
-            label="I authorize Roxru Financial to initiate a penny-drop transaction of ₹1 to verify this bank account."
-          />
-          {errors.authorized ? (
-            <Text style={styles.checkboxError}>{errors.authorized}</Text>
-          ) : null}
-
           <View style={styles.actions}>
             <TouchableOpacity
               style={styles.cancelBtn}
@@ -318,12 +299,6 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     color: colors.successText,
     fontWeight: '500',
-  },
-  checkboxError: {
-    marginTop: -8,
-    marginBottom: 12,
-    fontSize: 12,
-    color: colors.danger,
   },
   actions: {
     flexDirection: 'row',

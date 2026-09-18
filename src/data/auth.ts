@@ -1,4 +1,4 @@
-/** Dummy sign-in defaults shown in the reference design */
+/** Sign-in (credential) defaults */
 export const SIGN_IN_DEFAULTS = {
   mobileOrEmail: '',
   password: '',

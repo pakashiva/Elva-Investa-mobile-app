@@ -6,8 +6,23 @@ function formatCountdown(seconds: number): string {
   return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 }
 
-export function useOtpCountdown(initialSeconds: number) {
-  const [secondsLeft, setSecondsLeft] = useState(initialSeconds);
+type OtpTimersOptions = {
+  /** How long the OTP stays valid for verify. */
+  expiresInSeconds: number;
+  /** How soon the user can request another SMS (independent of expiry). */
+  resendCooldownSeconds: number;
+};
+
+/**
+ * Separate OTP expiry vs resend cooldown.
+ * Users can resend after a short wait even while the previous code is still valid.
+ */
+export function useOtpCountdown({
+  expiresInSeconds,
+  resendCooldownSeconds,
+}: OtpTimersOptions) {
+  const [expiresLeft, setExpiresLeft] = useState(expiresInSeconds);
+  const [resendLeft, setResendLeft] = useState(resendCooldownSeconds);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const clearTimer = useCallback(() => {
@@ -17,34 +32,41 @@ export function useOtpCountdown(initialSeconds: number) {
     }
   }, []);
 
-  const startTimer = useCallback(
-    (seconds: number) => {
+  const startTimers = useCallback(
+    (expiresSeconds: number, resendSeconds: number) => {
       clearTimer();
-      setSecondsLeft(seconds);
+      setExpiresLeft(expiresSeconds);
+      setResendLeft(resendSeconds);
       intervalRef.current = setInterval(() => {
-        setSecondsLeft((prev) => (prev > 0 ? prev - 1 : 0));
+        setExpiresLeft((prev) => (prev > 0 ? prev - 1 : 0));
+        setResendLeft((prev) => (prev > 0 ? prev - 1 : 0));
       }, 1000);
     },
     [clearTimer]
   );
 
   useEffect(() => {
-    startTimer(initialSeconds);
+    startTimers(expiresInSeconds, resendCooldownSeconds);
     return clearTimer;
-  }, [clearTimer, initialSeconds, startTimer]);
+  }, [clearTimer, expiresInSeconds, resendCooldownSeconds, startTimers]);
 
   const reset = useCallback(
-    (nextSeconds = initialSeconds) => {
-      startTimer(nextSeconds);
+    (
+      nextExpiresSeconds = expiresInSeconds,
+      nextResendSeconds = resendCooldownSeconds
+    ) => {
+      startTimers(nextExpiresSeconds, nextResendSeconds);
     },
-    [initialSeconds, startTimer]
+    [expiresInSeconds, resendCooldownSeconds, startTimers]
   );
 
   return {
-    secondsLeft,
-    formatted: formatCountdown(secondsLeft),
-    canResend: secondsLeft === 0,
-    isExpired: secondsLeft === 0,
+    expiresLeft,
+    resendLeft,
+    formattedExpires: formatCountdown(expiresLeft),
+    formattedResend: formatCountdown(resendLeft),
+    canResend: resendLeft === 0,
+    isExpired: expiresLeft === 0,
     reset,
   };
 }

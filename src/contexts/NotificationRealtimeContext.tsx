@@ -17,6 +17,7 @@ import { supabase } from '../lib/supabase';
 import {
   getNotificationsCreatedAfter,
   InvestorNotification,
+  mapNotificationKind,
 } from '../services/notificationService';
 
 const POLL_INTERVAL_MS = 8000;
@@ -58,7 +59,9 @@ function mapRealtimeRow(
     title,
     body,
     decision: row.decision === 'rejected' ? 'rejected' : 'approved',
-    kind: row.kind === 'withdrawal' ? 'withdrawal' : 'investment',
+    kind: mapNotificationKind(
+      typeof row.kind === 'string' ? row.kind : 'investment'
+    ),
   };
 }
 
