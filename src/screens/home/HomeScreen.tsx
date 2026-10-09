@@ -282,7 +282,9 @@ export default function HomeScreen() {
               Hi, {displayName}! <Text style={styles.wave}>👋</Text>
             </Text>
             <Text style={styles.subtitle}>
-              Here's what's happening with your investments
+              {session?.customer?.clientName
+                ? `Investments with ${session.customer.clientName}`
+                : "Here's what's happening with your investments"}
             </Text>
           </View>
           <View style={styles.headerActions}>

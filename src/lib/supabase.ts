@@ -1,18 +1,19 @@
-import 'react-native-url-polyfill/auto';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { createClient } from '@supabase/supabase-js';
-import { getSupabasePublishableKey, getSupabaseUrl } from './env';
-import type { Database } from '../types/database';
+/**
+ * The ELVA Investa mobile app talks to Express, not Supabase.
+ * Remaining VT screens that still import this module will get a clear error
+ * instead of crashing Expo at boot for a missing Supabase URL.
+ */
+function unusedFeature(): never {
+  throw new Error(
+    'This screen is still being connected to the ELVA Investa API.'
+  );
+}
 
-export const supabase = createClient<Database>(
-  getSupabaseUrl(),
-  getSupabasePublishableKey(),
+export const supabase = new Proxy(
+  {},
   {
-    auth: {
-      storage: AsyncStorage,
-      autoRefreshToken: true,
-      persistSession: true,
-      detectSessionInUrl: false,
+    get() {
+      return unusedFeature;
     },
   }
-);
+) as never;

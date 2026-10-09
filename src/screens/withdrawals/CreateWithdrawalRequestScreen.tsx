@@ -3,17 +3,15 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
   TextInput,
-  KeyboardAvoidingView,
-  Platform,
   Alert,
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FormSelectField from '../../components/form/FormSelectField';
+import KeyboardSafeScroll from '../../components/form/KeyboardSafeScroll';
 import HistoryRequestTabs from '../../components/withdrawals/HistoryRequestTabs';
 import WithdrawalStrategyCards from '../../components/withdrawals/WithdrawalStrategyCards';
 import RequestTimelineBar from '../../components/withdrawals/RequestTimelineBar';
@@ -316,16 +314,7 @@ export default function CreateWithdrawalRequestScreen({ navigation }: Props) {
         <View style={styles.headerSpacer} />
       </View>
 
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <ScrollView
-          style={styles.flex}
-          contentContainerStyle={styles.content}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
+      <KeyboardSafeScroll contentContainerStyle={styles.content}>
           <HistoryRequestTabs
             active="request"
             onHistory={goToHistory}
@@ -431,8 +420,7 @@ export default function CreateWithdrawalRequestScreen({ navigation }: Props) {
               <Text style={styles.submitText}>Submit Review</Text>
             )}
           </TouchableOpacity>
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardSafeScroll>
     </View>
   );
 }

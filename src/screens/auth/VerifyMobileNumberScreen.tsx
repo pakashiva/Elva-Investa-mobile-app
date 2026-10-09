@@ -1,12 +1,9 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,6 +11,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import OtpVisual from '../../components/auth/OtpVisual';
 import OtpInput from '../../components/auth/OtpInput';
+import KeyboardSafeScroll from '../../components/form/KeyboardSafeScroll';
 import PasswordInput from '../../components/auth/PasswordInput';
 import {
   MPIN_REQUIREMENT_TEXT,
@@ -29,7 +27,7 @@ import {
   sendOtp,
   verifyOtp,
 } from '../../services/otpService';
-import { signInWithEmail, signOut, setOwnMpin } from '../../services/authService';
+import { signInWithMobileOrEmail, signOut, setOwnMpin } from '../../services/authService';
 import { extendUnlockWindow } from '../../services/sessionUnlockStore';
 import {
   getProfileMobileNumber,
@@ -54,16 +52,16 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const {
     session,
-    refreshMobileVerified,
     clearOtpFlow,
     setBypassMobileVerification,
     markAppUnlocked,
     refreshUnlockWindow,
   } = useAuth();
   const mode: OtpMode = route.params?.mode ?? 'registration';
-  const shouldSendOtpOnEntry = route.params?.sendOtp === true;
+  const shouldSendOtpOnEntry = route.params?.sendOtp !== false;
   const recoveryEmail = route.params?.email?.trim().toLowerCase() ?? '';
   const routeMobile = route.params?.mobileNumber?.trim() ?? '';
+  const recoveryClientCode = route.params?.clientCode?.trim().toUpperCase() ?? '';
 
   const isForgotMpin = mode === 'forgotMpin';
   const isChangeMpin = mode === 'changeMpin';
@@ -91,7 +89,7 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
   );
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [isSendingOtp, setIsSendingOtp] = useState(shouldSendOtpOnEntry);
   const [isResendingOtp, setIsResendingOtp] = useState(false);
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
   const [isSavingCredential, setIsSavingCredential] = useState(false);
@@ -106,19 +104,32 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
     formattedResend,
     canResend,
     isExpired,
+    started: otpTimerStarted,
     reset,
   } = useOtpCountdown({
     expiresInSeconds: expiresIn,
     resendCooldownSeconds: RESEND_COOLDOWN_SECONDS,
   });
 
-  const otpOptions = isCredentialResetFlow
-    ? { mode, email: recoveryEmail }
-    : {
-        mode: 'registration' as const,
-        userId: session?.user?.id,
-        mobileNumber: pendingMobile || routeMobile || undefined,
-      };
+  const otpOptions = useMemo(
+    () =>
+      isCredentialResetFlow
+        ? { mode, email: recoveryEmail, clientCode: recoveryClientCode || undefined }
+        : {
+            mode: 'registration' as const,
+            userId: session?.user?.id,
+            mobileNumber: pendingMobile || routeMobile || undefined,
+          },
+    [
+      isCredentialResetFlow,
+      mode,
+      pendingMobile,
+      recoveryClientCode,
+      recoveryEmail,
+      routeMobile,
+      session?.user?.id,
+    ]
+  );
 
   const headerTitle = isChangeMpin
     ? 'Change MPIN'
@@ -144,19 +155,19 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
       return;
     }
 
-    const userId = session?.user?.id;
-    if (!userId) {
-      setErrorMessage(
-        'Please complete registration before verifying your mobile number.'
-      );
-      return;
-    }
-
     try {
-      const pending = await loadPendingRegistration(userId);
+      const pending = await loadPendingRegistration();
       if (pending?.mobileNumber) {
         setPendingMobile(pending.mobileNumber);
         setMaskedMobile(maskMobileNumber(pending.mobileNumber));
+        return;
+      }
+
+      const userId = session?.user?.id;
+      if (!userId) {
+        setErrorMessage(
+          'Please complete registration before verifying your mobile number.'
+        );
         return;
       }
 
@@ -182,7 +193,7 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
       return;
     }
 
-    if (!isCredentialResetFlow && !session?.user?.id) {
+    if (!isCredentialResetFlow && !isRegistrationFlow && !session?.user?.id) {
       setErrorMessage(
         'Please complete registration before verifying your mobile number.'
       );
@@ -226,33 +237,60 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
   ]);
 
   useEffect(() => {
-    loadMobileNumber();
-  }, [loadMobileNumber]);
+    if (!isRegistrationFlow) {
+      return;
+    }
+    if (session?.customer?.mobileVerified) {
+      setBypassMobileVerification(true);
+      clearOtpFlow();
+      markAppUnlocked();
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'MainTabs' }],
+      });
+    }
+  }, [
+    clearOtpFlow,
+    isRegistrationFlow,
+    markAppUnlocked,
+    navigation,
+    session?.customer?.mobileVerified,
+    setBypassMobileVerification,
+  ]);
 
   useEffect(() => {
+    if (isRegistrationFlow && session?.customer?.mobileVerified) {
+      return;
+    }
+
     if (!shouldSendOtpOnEntry || initialSendRef.current) {
       return;
     }
 
     if (isCredentialResetFlow) {
       if (!recoveryEmail) {
+        setIsSendingOtp(false);
         setErrorMessage('Registered email address is required.');
         return;
       }
-    } else if (!session?.user?.id) {
-      return;
-    } else if (!(pendingMobile || routeMobile)) {
+    } else if (isRegistrationFlow) {
+      if (!(pendingMobile || routeMobile)) {
+        return;
+      }
+    } else if (!session?.user?.id && !(pendingMobile || routeMobile)) {
       return;
     }
 
     initialSendRef.current = true;
-    handleSendOtp();
+    void handleSendOtp();
   }, [
     shouldSendOtpOnEntry,
     handleSendOtp,
     isCredentialResetFlow,
+    isRegistrationFlow,
     recoveryEmail,
     session?.user?.id,
+    session?.customer?.mobileVerified,
     pendingMobile,
     routeMobile,
   ]);
@@ -324,12 +362,7 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
         setRegistrationOtpConsumed(true);
       }
 
-      const userId = session?.user?.id;
-      if (!userId) {
-        throw new Error('Session expired. Please register again.');
-      }
-
-      await completeRegistrationAfterOtp(userId);
+      const { userId } = await completeRegistrationAfterOtp();
 
       try {
         await markMobileVerified();
@@ -338,8 +371,7 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
       }
 
       await extendUnlockWindow(userId);
-      await refreshUnlockWindow();
-      await refreshMobileVerified();
+      setBypassMobileVerification(true);
       clearOtpFlow();
       markAppUnlocked();
       setStatusMessage(statusText);
@@ -455,7 +487,7 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
       const response = await completePasswordReset(recoveryEmail, newPassword);
       setBypassMobileVerification(true);
       clearOtpFlow();
-      await signInWithEmail(recoveryEmail, newPassword);
+      await signInWithMobileOrEmail(recoveryEmail, newPassword, recoveryClientCode);
       await refreshUnlockWindow();
       markAppUnlocked();
       setStatusMessage(response.message);
@@ -528,19 +560,10 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
         <Text style={styles.headerTitle}>{headerTitle}</Text>
       </View>
 
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      <KeyboardSafeScroll
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
       >
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={[
-            styles.scrollContent,
-            { paddingBottom: insets.bottom + 32 },
-          ]}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
           <View style={styles.securityBanner}>
             <Ionicons
               name="shield-checkmark"
@@ -556,8 +579,11 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
 
           <Text style={styles.sectionTitle}>OTP Verification</Text>
           <Text style={styles.instruction}>
-            We have sent a 6-digit verification code to your registered mobile
-            number{' '}
+            {statusMessage
+              ? 'We have sent a 6-digit verification code to your registered mobile number '
+              : isSendingOtp
+                ? 'Sending a 6-digit verification code to your registered mobile number '
+                : 'A 6-digit verification code will be sent to your registered mobile number '}
             <Text style={styles.mobileBold}>{maskedMobile}</Text>
           </Text>
 
@@ -578,6 +604,7 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
 
           <OtpInput value={otp} onChange={setOtp} />
 
+          {otpTimerStarted ? (
           <View style={styles.resendRow}>
             <Ionicons
               name="time-outline"
@@ -595,6 +622,7 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
               )}
             </Text>
           </View>
+          ) : null}
 
           <View style={styles.resendPromptRow}>
             <Text style={styles.resendPrompt}>Didn&apos;t receive the code? </Text>
@@ -742,8 +770,7 @@ export default function VerifyMobileNumberScreen({ navigation, route }: Props) {
               </TouchableOpacity>
             </View>
           ) : null}
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardSafeScroll>
     </View>
   );
 }

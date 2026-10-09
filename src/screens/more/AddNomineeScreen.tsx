@@ -3,10 +3,7 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
-  KeyboardAvoidingView,
-  Platform,
   Alert,
   ActivityIndicator,
 } from 'react-native';
@@ -14,6 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import BankFormField from '../../components/bank/BankFormField';
 import FormSelectField from '../../components/form/FormSelectField';
+import KeyboardSafeScroll from '../../components/form/KeyboardSafeScroll';
 import { useAuth } from '../../contexts/AuthContext';
 import { RELATIONSHIP_OPTIONS } from '../../data/registrationForm';
 import { ADD_NOMINEE_DEFAULTS } from '../../data/nomineeForm';
@@ -113,16 +111,7 @@ export default function AddNomineeScreen({ navigation }: Props) {
         </View>
       </View>
 
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <ScrollView
-          style={styles.flex}
-          contentContainerStyle={styles.content}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
+      <KeyboardSafeScroll contentContainerStyle={styles.content}>
           <View style={styles.securityBanner}>
             <Ionicons
               name="shield-checkmark"
@@ -199,8 +188,7 @@ export default function AddNomineeScreen({ navigation }: Props) {
               )}
             </TouchableOpacity>
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardSafeScroll>
     </View>
   );
 }

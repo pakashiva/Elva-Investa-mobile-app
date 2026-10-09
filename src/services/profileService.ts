@@ -1,226 +1,117 @@
-import { supabase } from '../lib/supabase';
+import { apiRequest } from '../lib/api';
+import { CustomerPayload } from '../types/auth';
 import { UserProfileDetails } from '../types/profile';
 import { formatProfileDateOfBirth } from '../utils/profileFormat';
-import { isMissingTableError } from '../utils/supabaseErrors';
+import { getStoredSession, persistSession, getStoredToken } from './sessionStore';
 
-type ProfileRow = {
-  full_name: string;
-  mobile_number: string;
-  email_address: string;
-  date_of_birth: string;
+type ProfileResponse = {
+  profile: {
+    fullName: string;
+    mobileNumber: string;
+    emailAddress: string;
+    dateOfBirth: string;
+    panNumber: string | null;
+    customerId: string | null;
+    verified: boolean;
+  };
 };
 
-type KycRow = {
-  pan_number: string;
-};
-
-export async function getProfileFullName(userId: string): Promise<string | null> {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('full_name')
-    .eq('user_id', userId)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(error.message);
+export async function getProfileFullName(
+  _userId?: string
+): Promise<string | null> {
+  const session = await getStoredSession();
+  if (session?.customer?.fullName) {
+    return session.customer.fullName.trim();
   }
-
-  return data?.full_name?.trim() || null;
+  const details = await getUserProfileDetails();
+  return details?.fullName?.trim() || null;
 }
 
-export async function getProfileFirstName(userId: string): Promise<string | null> {
-  const fullName = await getProfileFullName(userId);
+export async function getProfileFirstName(
+  _userId?: string
+): Promise<string | null> {
+  const fullName = await getProfileFullName();
   if (!fullName) {
     return null;
   }
   return fullName.split(/\s+/)[0] ?? fullName;
 }
 
-export async function getMobileVerifiedStatus(userId: string): Promise<boolean | null> {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('mobile_verified')
-    .eq('user_id', userId)
-    .maybeSingle();
-
-  if (error) {
-    if (isMissingTableError(error)) {
+export async function getMobileVerifiedStatus(
+  _userId?: string
+): Promise<boolean | null> {
+  try {
+    const data = await apiRequest<{ customer: CustomerPayload }>(
+      '/api/mobile/auth/me'
+    );
+    const token = await getStoredToken();
+    if (token && data.customer) {
+      await persistSession(token, data.customer);
+    }
+    return Boolean(data.customer?.mobileVerified);
+  } catch {
+    const session = await getStoredSession();
+    if (!session?.customer) {
       return null;
     }
-    throw new Error(error.message);
+    return Boolean(session.customer.mobileVerified);
   }
-
-  if (!data) {
-    return null;
-  }
-
-  return Boolean(data.mobile_verified);
 }
 
-export async function getProfileMobileNumber(userId: string): Promise<string | null> {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('mobile_number')
-    .eq('user_id', userId)
-    .maybeSingle();
-
-  if (error) {
-    if (isMissingTableError(error)) {
-      return null;
-    }
-    throw new Error(error.message);
+export async function getProfileMobileNumber(
+  _userId?: string
+): Promise<string | null> {
+  const session = await getStoredSession();
+  if (session?.customer?.mobileNumber) {
+    return session.customer.mobileNumber;
   }
-
-  return data?.mobile_number?.trim() || null;
-}
-
-export async function getRecoveryMobileByEmail(email: string): Promise<string | null> {
-  const { data, error } = await supabase.rpc('get_recovery_mobile_by_email', {
-    p_email: email.trim().toLowerCase(),
-  });
-
-  if (error) {
-    if (error.message.includes('function') && error.message.includes('does not exist')) {
-      throw new Error(
-        'Password recovery is unavailable. Apply migration 008_otp_recovery.sql first.'
-      );
-    }
-    throw new Error(error.message);
-  }
-
-  return typeof data === 'string' ? data.trim() || null : null;
+  const details = await getUserProfileDetails();
+  return details?.mobileNumber?.trim() || null;
 }
 
 export async function markMobileVerified(): Promise<void> {
-  const { error } = await supabase.rpc('mark_mobile_verified');
-
-  if (error) {
-    if (error.message.includes('function') && error.message.includes('does not exist')) {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user?.id) {
-        throw new Error('Unauthorized');
-      }
-
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({ mobile_verified: true })
-        .eq('user_id', user.id);
-
-      if (updateError) {
-        throw new Error(updateError.message);
-      }
-      return;
-    }
-    throw new Error(error.message);
-  }
-}
-
-export async function completePasswordRecovery(
-  email: string,
-  newPassword: string
-): Promise<void> {
-  const { error } = await supabase.rpc('complete_password_recovery', {
-    p_email: email.trim().toLowerCase(),
-    p_new_password: newPassword,
-  });
-
-  if (error) {
-    if (
-      error.message.includes('function') &&
-      (error.message.includes('does not exist') ||
-        error.message.includes('not found'))
-    ) {
-      throw new Error(
-        'Password recovery is unavailable. Apply migration 023_split_mpin_and_password.sql in Supabase SQL Editor.'
-      );
-    }
-    throw new Error(error.message);
-  }
-}
-
-export async function completeMpinRecovery(
-  email: string,
-  newMpin: string
-): Promise<void> {
-  const { error } = await supabase.rpc('complete_mpin_recovery', {
-    p_email: email.trim().toLowerCase(),
-    p_new_mpin: newMpin,
-  });
-
-  if (error) {
-    if (
-      error.message.includes('function') &&
-      (error.message.includes('does not exist') ||
-        error.message.includes('not found'))
-    ) {
-      throw new Error(
-        'MPIN recovery is unavailable. Apply migration 023_split_mpin_and_password.sql in Supabase SQL Editor.'
-      );
-    }
-    throw new Error(error.message);
+  const data = await apiRequest<{ customer: CustomerPayload }>(
+    '/api/mobile/auth/verify-mobile',
+    { method: 'POST' }
+  );
+  const token = await getStoredToken();
+  if (token && data.customer) {
+    await persistSession(token, data.customer);
   }
 }
 
 export async function getUserProfileDetails(
-  userId: string,
-  fallbackEmail?: string | null
+  _userId?: string,
+  _fallbackEmail?: string | null
 ): Promise<UserProfileDetails | null> {
-  const [profileResult, kycResult, customerResult] = await Promise.all([
-    supabase
-      .from('profiles')
-      .select('full_name, mobile_number, email_address, date_of_birth')
-      .eq('user_id', userId)
-      .maybeSingle(),
-    supabase
-      .from('kyc_documents')
-      .select('pan_number')
-      .eq('user_id', userId)
-      .maybeSingle(),
-    supabase
-      .from('customers')
-      .select('customer_id')
-      .eq('user_id', userId)
-      .maybeSingle(),
-  ]);
-
-  if (profileResult.error) {
-    if (isMissingTableError(profileResult.error)) {
+  try {
+    const data = await apiRequest<ProfileResponse>('/api/mobile/profile');
+    const profile = data.profile;
+    if (!profile) {
       return null;
     }
-    throw new Error(profileResult.error.message);
+    return {
+      fullName: profile.fullName.trim(),
+      mobileNumber: profile.mobileNumber.trim(),
+      emailAddress: profile.emailAddress.trim(),
+      dateOfBirth: formatProfileDateOfBirth(profile.dateOfBirth),
+      panNumber: profile.panNumber?.trim() || null,
+      customerId: profile.customerId,
+      verified: Boolean(profile.verified),
+    };
+  } catch {
+    const session = await getStoredSession();
+    if (!session?.customer) {
+      return null;
+    }
+    return {
+      fullName: session.customer.fullName,
+      mobileNumber: session.customer.mobileNumber,
+      emailAddress: session.customer.emailAddress,
+      dateOfBirth: '',
+      panNumber: null,
+      customerId: session.customer.customerCode,
+      verified: false,
+    };
   }
-
-  if (!profileResult.data) {
-    return null;
-  }
-
-  if (kycResult.error && !isMissingTableError(kycResult.error)) {
-    throw new Error(kycResult.error.message);
-  }
-
-  if (customerResult.error && !isMissingTableError(customerResult.error)) {
-    throw new Error(customerResult.error.message);
-  }
-
-  const profile = profileResult.data as ProfileRow;
-  const kyc = (kycResult.data as KycRow | null) ?? null;
-  const emailAddress =
-    profile.email_address?.trim() || fallbackEmail?.trim() || '';
-  const customerId =
-    !customerResult.error && customerResult.data?.customer_id
-      ? String(customerResult.data.customer_id).trim() || null
-      : null;
-
-  return {
-    fullName: profile.full_name.trim(),
-    mobileNumber: profile.mobile_number.trim(),
-    emailAddress,
-    dateOfBirth: formatProfileDateOfBirth(profile.date_of_birth),
-    panNumber: kyc?.pan_number?.trim() || null,
-    customerId,
-    verified: Boolean(kyc),
-  };
 }

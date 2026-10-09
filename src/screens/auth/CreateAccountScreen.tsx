@@ -1,12 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
   Alert,
   ActivityIndicator,
 } from 'react-native';
@@ -19,6 +16,7 @@ import RegistrationSectionHeader from '../../components/registration/Registratio
 import RegistrationTextField from '../../components/registration/RegistrationTextField';
 import FormSelectField from '../../components/form/FormSelectField';
 import FormCheckbox from '../../components/form/FormCheckbox';
+import KeyboardSafeScroll from '../../components/form/KeyboardSafeScroll';
 import {
   REGISTRATION_AUTHORIZATION_TEXT,
   REGISTRATION_FORM_DEFAULTS,
@@ -29,6 +27,7 @@ import {
 } from '../../data/registrationForm';
 import PasswordInput from '../../components/auth/PasswordInput';
 import { beginRegistration } from '../../services/registrationService';
+import { lookupClientCode } from '../../services/clientLookupService';
 import { useAuth } from '../../contexts/AuthContext';
 import { detectBankNameFromIfsc } from '../../utils/bankName';
 import { RootStackScreenProps } from '../../navigation/types';
@@ -52,6 +51,60 @@ export default function CreateAccountScreen({ navigation }: Props) {
   const [form, setForm] = useState(REGISTRATION_FORM_DEFAULTS);
   const [errors, setErrors] = useState<RegistrationFormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [clientName, setClientName] = useState<string | null>(null);
+  const [isLookingUpClient, setIsLookingUpClient] = useState(false);
+
+  useEffect(() => {
+    const code = form.clientCode.trim().toUpperCase();
+    if (!/^[A-Z0-9]{3,20}$/.test(code)) {
+      setClientName(null);
+      return;
+    }
+
+    let cancelled = false;
+    setClientName(null);
+    setIsLookingUpClient(true);
+    const timer = setTimeout(() => {
+      void lookupClientCode(code)
+        .then((client) => {
+          if (cancelled) {
+            return;
+          }
+          setClientName(client.name);
+          setErrors((prev) => {
+            if (!prev.clientCode) {
+              return prev;
+            }
+            const next = { ...prev };
+            delete next.clientCode;
+            return next;
+          });
+        })
+        .catch((error) => {
+          if (cancelled) {
+            return;
+          }
+          setClientName(null);
+          setErrors((prev) => ({
+            ...prev,
+            clientCode:
+              error instanceof Error
+                ? error.message
+                : 'That client code was not found.',
+          }));
+        })
+        .finally(() => {
+          if (!cancelled) {
+            setIsLookingUpClient(false);
+          }
+        });
+    }, 400);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [form.clientCode]);
 
   const updateField = <K extends keyof typeof form>(
     key: K,
@@ -80,8 +133,6 @@ export default function CreateAccountScreen({ navigation }: Props) {
     }
 
     setIsSubmitting(true);
-    // Mark registration OTP flow before signup creates a session,
-    // so AuthNavigationHandler does not send the user to Home early.
     setBypassMobileVerification(false);
     setOtpFlow('registration');
 
@@ -119,19 +170,10 @@ export default function CreateAccountScreen({ navigation }: Props) {
         <Text style={styles.headerTitle}>Create Account</Text>
       </View>
 
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      <KeyboardSafeScroll
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
       >
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={[
-            styles.scrollContent,
-            { paddingBottom: insets.bottom + 32 },
-          ]}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
           <View style={styles.securityBanner}>
             <Ionicons
               name="shield-checkmark"
@@ -143,6 +185,29 @@ export default function CreateAccountScreen({ navigation }: Props) {
 
           <RegistrationSectionHeader
             number={1}
+            title="Your trader"
+            description="Enter the client code given by your trader. You will stay with this client."
+          />
+
+          <RegistrationTextField
+            label="Client Code"
+            required
+            value={form.clientCode}
+            onChangeText={(text) =>
+              updateField('clientCode', text.toUpperCase().replace(/[^A-Z0-9]/g, ''))
+            }
+            error={errors.clientCode}
+            autoCapitalize="characters"
+            placeholder="Example: VTINVEST"
+          />
+          {isLookingUpClient ? (
+            <Text style={styles.helperText}>Checking client code…</Text>
+          ) : clientName ? (
+            <Text style={styles.helperText}>Joining {clientName}</Text>
+          ) : null}
+
+          <RegistrationSectionHeader
+            number={2}
             title="Personal Details"
             description="Enter your legal details as per official documents"
           />
@@ -190,7 +255,7 @@ export default function CreateAccountScreen({ navigation }: Props) {
           />
 
           <RegistrationSectionHeader
-            number={2}
+            number={3}
             title="KYC Documents Verification"
             description="Enter Aadhaar and PAN numbers for compliance"
           />
@@ -214,7 +279,7 @@ export default function CreateAccountScreen({ navigation }: Props) {
           />
 
           <RegistrationSectionHeader
-            number={3}
+            number={4}
             title="Bank Account Details"
             description="For easy deposits and secure payouts"
           />
@@ -303,7 +368,7 @@ export default function CreateAccountScreen({ navigation }: Props) {
           />
 
           <RegistrationSectionHeader
-            number={4}
+            number={5}
             title="Nominee Details"
             description="Nominate a successor for your digital assets"
           />
@@ -357,7 +422,7 @@ export default function CreateAccountScreen({ navigation }: Props) {
           />
 
           <RegistrationSectionHeader
-            number={5}
+            number={6}
             title="Set Password & MPIN"
             description="Password for sign-in; MPIN to unlock the app on this device"
           />
@@ -448,8 +513,7 @@ export default function CreateAccountScreen({ navigation }: Props) {
               <Text style={styles.submitText}>Submit Registration</Text>
             )}
           </TouchableOpacity>
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardSafeScroll>
     </View>
   );
 }
@@ -517,6 +581,14 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     fontSize: 12,
     color: '#FF3B30',
+  },
+  helperText: {
+    marginTop: -8,
+    marginBottom: 12,
+    fontSize: 12,
+    lineHeight: 18,
+    color: colors.successText,
+    fontWeight: '600',
   },
   passwordHint: {
     fontSize: 12,

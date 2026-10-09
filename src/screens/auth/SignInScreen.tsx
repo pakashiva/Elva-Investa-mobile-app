@@ -4,16 +4,14 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
   ActivityIndicator,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import BrandLogo from '../../components/auth/BrandLogo';
-import { BRAND_NAME, BRAND_TAGLINE } from '../../constants/brandAssets';
+import { BRAND_TAGLINE } from '../../constants/brandAssets';
 import SignInTextField from '../../components/auth/SignInTextField';
+import KeyboardSafeScroll from '../../components/form/KeyboardSafeScroll';
 import { SIGN_IN_DEFAULTS } from '../../data/auth';
 import { useAuth } from '../../contexts/AuthContext';
 import {
@@ -37,6 +35,7 @@ export default function SignInScreen({ navigation }: Props) {
     SIGN_IN_DEFAULTS.mobileOrEmail
   );
   const [password, setPassword] = useState(SIGN_IN_DEFAULTS.password);
+  const [clientCode, setClientCode] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -49,6 +48,10 @@ export default function SignInScreen({ navigation }: Props) {
       setErrorMessage('Enter your password.');
       return;
     }
+    if (!/^[A-Z0-9]{3,20}$/.test(clientCode.trim().toUpperCase())) {
+      setErrorMessage('Enter the client code of the trader you registered with.');
+      return;
+    }
 
     setIsSubmitting(true);
     setErrorMessage(null);
@@ -56,7 +59,7 @@ export default function SignInScreen({ navigation }: Props) {
     clearOtpFlow();
 
     try {
-      await signInWithMobileOrEmail(mobileOrEmail, password);
+      await signInWithMobileOrEmail(mobileOrEmail, password, clientCode);
       await refreshUnlockWindow();
       markAppUnlocked();
       navigation.reset({
@@ -78,6 +81,10 @@ export default function SignInScreen({ navigation }: Props) {
       setErrorMessage('Enter your registered mobile number or email first.');
       return;
     }
+    if (!/^[A-Z0-9]{3,20}$/.test(clientCode.trim().toUpperCase())) {
+      setErrorMessage('Enter the client code of the trader you registered with.');
+      return;
+    }
 
     setErrorMessage(null);
     clearOtpFlow();
@@ -87,6 +94,7 @@ export default function SignInScreen({ navigation }: Props) {
       navigation.navigate('VerifyMobileNumber', {
         mode: 'forgotPassword',
         email,
+        clientCode: clientCode.trim().toUpperCase(),
         sendOtp: true,
       });
     } catch (error) {
@@ -103,24 +111,17 @@ export default function SignInScreen({ navigation }: Props) {
       <StatusBar style="light" />
 
       <View style={[styles.header, { paddingTop: insets.top + 28 }]}>
-        <BrandLogo size={104} />
-        <Text style={styles.brandTitle}>{BRAND_NAME}</Text>
+        <BrandLogo size={168} />
         <Text style={styles.brandTagline}>{BRAND_TAGLINE}</Text>
       </View>
 
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      <KeyboardSafeScroll
+        style={styles.formSection}
+        contentContainerStyle={styles.formContent}
       >
-        <ScrollView
-          style={styles.formSection}
-          contentContainerStyle={styles.formContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
           <Text style={styles.welcome}>Welcome</Text>
           <Text style={styles.welcomeSubtitle}>
-            Sign in with your mobile number or email and password
+            Sign in to one trader with your mobile or email, password, and that trader's client code.
           </Text>
 
           <SignInTextField
@@ -140,6 +141,17 @@ export default function SignInScreen({ navigation }: Props) {
             onChangeText={setPassword}
             placeholder="Enter your password"
             secureTextEntry
+            returnKeyType="next"
+            onSubmitEditing={handleSignIn}
+          />
+
+          <SignInTextField
+            label="Client code"
+            value={clientCode}
+            onChangeText={(text) => setClientCode(text.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+            placeholder="Example: VTINVEST or MLGINVST"
+            autoCapitalize="characters"
+            autoCorrect={false}
             returnKeyType="done"
             onSubmitEditing={handleSignIn}
           />
@@ -184,8 +196,7 @@ export default function SignInScreen({ navigation }: Props) {
               <Text style={styles.registerLink}>Register Now</Text>
             </TouchableOpacity>
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardSafeScroll>
     </View>
   );
 }
@@ -199,21 +210,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    backgroundColor: authColors.header,
+    backgroundColor: '#000000',
     alignItems: 'center',
     paddingBottom: 36,
     paddingHorizontal: 24,
   },
-  brandTitle: {
-    fontSize: 26,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    letterSpacing: -0.3,
-    marginBottom: 8,
-  },
   brandTagline: {
     fontSize: 14,
-    color: authColors.gold,
+    color: '#66D49A',
     fontWeight: '500',
   },
   formSection: {

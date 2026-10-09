@@ -1,9 +1,4 @@
-import { supabase } from '../lib/supabase';
-import { processUserInvestmentInterest } from './investmentInterestService';
-import {
-  isMissingTableError,
-  withJwtRetry,
-} from '../utils/supabaseErrors';
+import { apiRequest } from '../lib/api';
 
 export type HomeSummary = {
   totalInvested: number;
@@ -15,6 +10,21 @@ export type HomeSummary = {
   paidWithdrawalCount: number;
 };
 
+export type HomeChartInvestment = {
+  name: string;
+  fundAmount: number;
+  totalEarnings: number;
+  interestRate: number;
+  investedDate: string | null;
+  completedInterestPeriods: number;
+  tdsPercent: number;
+};
+
+export type HomeDashboard = {
+  summary: HomeSummary;
+  chartInvestments: HomeChartInvestment[];
+};
+
 export const EMPTY_HOME_SUMMARY: HomeSummary = {
   totalInvested: 0,
   activeInvestmentCount: 0,
@@ -24,6 +34,24 @@ export const EMPTY_HOME_SUMMARY: HomeSummary = {
   totalWithdrawals: 0,
   paidWithdrawalCount: 0,
 };
+
+export async function getHomeDashboard(): Promise<HomeDashboard> {
+  const data = await apiRequest<HomeDashboard>('/api/mobile/home');
+  return {
+    summary: {
+      ...EMPTY_HOME_SUMMARY,
+      ...(data.summary ?? {}),
+    },
+    chartInvestments: data.chartInvestments ?? [],
+  };
+}
+
+export async function getHomeSummary(
+  _userId?: string
+): Promise<HomeSummary> {
+  const dashboard = await getHomeDashboard();
+  return dashboard.summary;
+}
 
 function calculateHomeSummary(
   activeInvestments: { fund_amount: number; total_earnings: number | null }[],
@@ -55,46 +83,6 @@ function calculateHomeSummary(
     totalWithdrawals,
     paidWithdrawalCount: paidWithdrawals.length,
   };
-}
-
-async function fetchHomeSummary(userId: string): Promise<HomeSummary> {
-  await processUserInvestmentInterest(userId);
-
-  const [investmentsResult, withdrawalsResult] = await Promise.all([
-    supabase
-      .from('investments')
-      .select('fund_amount, total_earnings')
-      .eq('user_id', userId)
-      .eq('status', 'Active'),
-    supabase
-      .from('withdrawals')
-      .select('net_payout, withdrawal_amount')
-      .eq('user_id', userId)
-      .eq('status', 'Paid'),
-  ]);
-
-  if (investmentsResult.error) {
-    if (isMissingTableError(investmentsResult.error)) {
-      return EMPTY_HOME_SUMMARY;
-    }
-    throw new Error(investmentsResult.error.message);
-  }
-
-  if (withdrawalsResult.error) {
-    if (isMissingTableError(withdrawalsResult.error)) {
-      return calculateHomeSummary(investmentsResult.data ?? [], []);
-    }
-    throw new Error(withdrawalsResult.error.message);
-  }
-
-  return calculateHomeSummary(
-    investmentsResult.data ?? [],
-    withdrawalsResult.data ?? []
-  );
-}
-
-export async function getHomeSummary(userId: string): Promise<HomeSummary> {
-  return withJwtRetry(() => fetchHomeSummary(userId));
 }
 
 /** Exported for unit tests */

@@ -1,8 +1,10 @@
 import { parseDateOfBirth } from '../utils/formatDate';
 import { RegistrationFormValues } from '../types/registrationForm';
+import { CustomerPayload } from '../types/auth';
 import { normalizeMobileDigits } from '../utils/indianValidators';
-import { signUpWithEmail, signOut } from './authService';
-import { supabase } from '../lib/supabase';
+import { apiRequest } from '../lib/api';
+import { persistSession, getStoredSession } from './sessionStore';
+import { saveMpin } from './mpinStore';
 import {
   clearPendingRegistration,
   loadPendingRegistration,
@@ -22,38 +24,62 @@ function toIsoDate(dateOfBirth: string): string {
   return `${year}-${month}-${day}`;
 }
 
-function isDuplicateError(message: string): boolean {
-  const lower = message.toLowerCase();
-  return (
-    lower.includes('duplicate') ||
-    lower.includes('unique') ||
-    lower.includes('already exists')
-  );
+function splitIndianAddress(address: string): {
+  city: string;
+  state: string;
+  pinCode: string;
+} {
+  const pinCode = address.match(/(\d{6})\s*$/)?.[1] ?? '';
+  const withoutPin = address.replace(/,?\s*\d{6}\s*$/, '').trim();
+  const parts = withoutPin
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const state = parts.length >= 2 ? parts[parts.length - 1] : '';
+  const city =
+    parts.length >= 2
+      ? parts[parts.length - 2]
+      : parts.length === 1
+        ? parts[0]
+        : '';
+  return { city, state, pinCode };
 }
 
-async function assertEmailMobileComboAvailable(
-  email: string,
-  mobile: string
-): Promise<void> {
-  const { data, error } = await supabase.rpc('is_email_mobile_combo_available', {
-    p_email: email,
-    p_mobile: mobile,
-  });
+function buildRegisterBody(form: RegistrationFormValues) {
+  const mobileNumber = normalizeMobileDigits(form.mobileNumber);
+  const emailAddress = form.emailAddress.trim().toLowerCase();
+  const { city, state, pinCode } = splitIndianAddress(form.address);
 
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  if (data === false) {
-    throw new Error(
-      'An account with this email and mobile number combination already exists. Try signing in, or use a different email/mobile pair.'
-    );
-  }
+  return {
+    clientCode: form.clientCode.trim().toUpperCase(),
+    fullName: form.fullName.trim(),
+    emailAddress,
+    mobileNumber,
+    dateOfBirth: toIsoDate(form.dateOfBirth),
+    address: form.address.trim(),
+    city,
+    state,
+    pinCode,
+    aadhaarNumber: form.aadhaarNumber.replace(/\D/g, ''),
+    panNumber: form.panNumber.trim().toUpperCase(),
+    accountHolderName: form.accountHolderName.trim(),
+    accountNumber: form.accountNumber.replace(/\D/g, ''),
+    ifscCode: form.ifscCode.trim().toUpperCase(),
+    bankName: form.bankName.trim(),
+    accountType: form.accountType,
+    nomineeName: form.nomineeName.trim(),
+    relationship: form.relationship,
+    nomineeAadhaar: form.nomineeAadhaar.replace(/\D/g, ''),
+    nomineeMobile: normalizeMobileDigits(form.nomineeMobile),
+    nomineePan: form.nomineePan.trim().toUpperCase(),
+    password: form.password,
+    authorized: form.authorized,
+  };
 }
 
 /**
- * Creates Auth session only. Profile / customer / KYC rows are written after OTP
- * so the admin portal does not see the customer beforehand.
+ * Stores the form locally and sends the user to OTP.
+ * The customer row is created only after OTP succeeds.
  */
 export async function beginRegistration(
   form: RegistrationFormValues
@@ -61,36 +87,13 @@ export async function beginRegistration(
   const mobileNumber = normalizeMobileDigits(form.mobileNumber);
   const emailAddress = form.emailAddress.trim().toLowerCase();
 
-  await assertEmailMobileComboAvailable(emailAddress, mobileNumber);
-
-  const { session } = await signUpWithEmail(
+  await savePendingRegistration({
+    ...form,
+    mobileNumber,
     emailAddress,
-    form.password,
-    form.fullName
-  );
+  });
 
-  if (!session?.user?.id) {
-    throw new Error(
-      'Account was created but no active session is available. Disable email confirmation in Supabase Auth settings for mobile registration, or confirm your email before signing in.'
-    );
-  }
-
-  const userId = session.user.id;
-
-  try {
-    await savePendingRegistration(userId, {
-      ...form,
-      mobileNumber,
-      emailAddress,
-    });
-  } catch (error) {
-    await signOut();
-    throw error instanceof Error
-      ? error
-      : new Error('Unable to save registration details.');
-  }
-
-  return { userId, mobileNumber };
+  return { userId: '', mobileNumber };
 }
 
 /** @deprecated Use beginRegistration + completeRegistrationAfterOtp */
@@ -100,151 +103,65 @@ export async function registerUser(
   return beginRegistration(form);
 }
 
-/**
- * Persists profile (triggers customer + referral), KYC, bank, nominee, MPIN hash.
- * Call only after OTP verification succeeds.
- * Safe to retry if a previous attempt partially succeeded.
- */
 export async function completeRegistrationAfterOtp(
-  userId: string
-): Promise<void> {
-  const form = await loadPendingRegistration(userId);
-  if (!form) {
+  _userId?: string
+): Promise<{ userId: string }> {
+  const form = await loadPendingRegistration();
+
+  if (form) {
+    const data = await apiRequest<{ token: string; customer: CustomerPayload }>(
+      '/api/mobile/auth/register',
+      {
+        method: 'POST',
+        auth: false,
+        body: JSON.stringify(buildRegisterBody(form)),
+      }
+    );
+
+    await persistSession(data.token, {
+      ...data.customer,
+      mobileVerified: true,
+    });
+
+    const verified = await apiRequest<{ customer: CustomerPayload }>(
+      '/api/mobile/auth/verify-mobile',
+      { method: 'POST' }
+    );
+    await persistSession(data.token, {
+      ...(verified.customer ?? data.customer),
+      mobileVerified: true,
+    });
+
+    await saveMpin({
+      customerId: data.customer.id,
+      email: form.emailAddress,
+      mpin: form.mpin,
+    });
+    await clearPendingRegistration();
+
+    return { userId: data.customer.id };
+  }
+
+  const session = await getStoredSession();
+  if (!session?.customer?.id) {
     throw new Error(
       'Registration details were lost. Please register again from the start.'
     );
   }
 
-  const mobileNumber = normalizeMobileDigits(form.mobileNumber);
-  const emailAddress = form.emailAddress.trim().toLowerCase();
-  const panNumber = form.panNumber.trim().toUpperCase();
-  const ifscCode = form.ifscCode.trim().toUpperCase();
-  const aadhaarNumber = form.aadhaarNumber.replace(/\D/g, '');
-  const nomineeAadhaar = form.nomineeAadhaar.replace(/\D/g, '');
-  const nomineeMobile = normalizeMobileDigits(form.nomineeMobile);
-  const nomineePan = form.nomineePan.trim().toUpperCase();
-  const accountNumber = form.accountNumber.replace(/\D/g, '');
-
-  const { data: existingProfile, error: profileLookupError } = await supabase
-    .from('profiles')
-    .select('user_id')
-    .eq('user_id', userId)
-    .maybeSingle();
-
-  if (profileLookupError) {
-    throw new Error(profileLookupError.message);
+  const verified = await apiRequest<{ customer: CustomerPayload }>(
+    '/api/mobile/auth/verify-mobile',
+    { method: 'POST' }
+  );
+  if (verified.customer) {
+    await persistSession(session.access_token, verified.customer);
   }
 
-  if (!existingProfile) {
-    const profileResult = await supabase.from('profiles').insert({
-      user_id: userId,
-      full_name: form.fullName.trim(),
-      mobile_number: mobileNumber,
-      email_address: emailAddress,
-      date_of_birth: toIsoDate(form.dateOfBirth),
-      address: form.address.trim(),
-      authorized: form.authorized,
-      mobile_verified: true,
-    });
-
-    if (profileResult.error) {
-      const message = profileResult.error.message;
-      if (!isDuplicateError(message)) {
-        if (
-          message.toLowerCase().includes('idx_profiles_email_mobile_combo')
-        ) {
-          throw new Error(
-            'An account with this email and mobile number combination already exists.'
-          );
-        }
-        throw new Error(message);
-      }
-    }
-  }
-
-  const { error: mpinError } = await supabase.rpc('set_own_mpin', {
-    p_mpin: form.mpin,
-  });
-  if (mpinError) {
-    throw new Error(mpinError.message);
-  }
-
-  const { data: existingKyc, error: kycLookupError } = await supabase
-    .from('kyc_documents')
-    .select('id')
-    .eq('user_id', userId)
-    .maybeSingle();
-
-  if (kycLookupError) {
-    throw new Error(kycLookupError.message);
-  }
-
-  if (!existingKyc) {
-    // Admin migration 029 removed image path columns — insert numbers only.
-    const kycResult = await supabase.from('kyc_documents').insert({
-      user_id: userId,
-      aadhaar_number: aadhaarNumber,
-      pan_number: panNumber,
-    });
-
-    if (kycResult.error && !isDuplicateError(kycResult.error.message)) {
-      throw new Error(kycResult.error.message);
-    }
-  }
-
-  const { data: existingBank, error: bankLookupError } = await supabase
-    .from('bank_accounts')
-    .select('id')
-    .eq('user_id', userId)
-    .limit(1)
-    .maybeSingle();
-
-  if (bankLookupError) {
-    throw new Error(bankLookupError.message);
-  }
-
-  if (!existingBank) {
-    const bankResult = await supabase.from('bank_accounts').insert({
-      user_id: userId,
-      account_holder_name: form.accountHolderName.trim(),
-      account_number: accountNumber,
-      ifsc_code: ifscCode,
-      bank_name: form.bankName.trim(),
-      branch_name: form.branchName.trim(),
-      account_type: form.accountType,
-      is_primary: true,
-    });
-
-    if (bankResult.error && !isDuplicateError(bankResult.error.message)) {
-      throw new Error(bankResult.error.message);
-    }
-  }
-
-  const { data: existingNominee, error: nomineeLookupError } = await supabase
-    .from('nominees')
-    .select('id')
-    .eq('user_id', userId)
-    .limit(1)
-    .maybeSingle();
-
-  if (nomineeLookupError) {
-    throw new Error(nomineeLookupError.message);
-  }
-
-  if (!existingNominee) {
-    const nomineeResult = await supabase.from('nominees').insert({
-      user_id: userId,
-      nominee_name: form.nomineeName.trim(),
-      relationship: form.relationship,
-      nominee_aadhaar: nomineeAadhaar,
-      nominee_mobile: nomineeMobile,
-      nominee_pan: nomineePan,
-    });
-
-    if (nomineeResult.error && !isDuplicateError(nomineeResult.error.message)) {
-      throw new Error(nomineeResult.error.message);
-    }
-  }
-
-  await clearPendingRegistration(userId);
+  return { userId: session.customer.id };
 }
+
+
+
+
+
+

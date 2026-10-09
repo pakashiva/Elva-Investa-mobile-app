@@ -4,9 +4,6 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
   ActivityIndicator,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -14,6 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import BrandLogo from '../../components/auth/BrandLogo';
 import { BRAND_NAME, BRAND_TAGLINE } from '../../constants/brandAssets';
 import SignInTextField from '../../components/auth/SignInTextField';
+import KeyboardSafeScroll from '../../components/form/KeyboardSafeScroll';
 import { useAuth } from '../../contexts/AuthContext';
 import { unlockWithMpin, signOut } from '../../services/authService';
 import { validateMpin } from '../../utils/validateMpin';
@@ -96,16 +94,10 @@ export default function MpinLockScreen({ navigation }: Props) {
         <Text style={styles.brandTagline}>{BRAND_TAGLINE}</Text>
       </View>
 
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      <KeyboardSafeScroll
+        style={styles.formSection}
+        contentContainerStyle={styles.formContent}
       >
-        <ScrollView
-          style={styles.formSection}
-          contentContainerStyle={styles.formContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
           <Text style={styles.welcome}>Enter MPIN</Text>
           <Text style={styles.welcomeSubtitle}>
             Enter your 4-digit MPIN to unlock the app
@@ -155,8 +147,7 @@ export default function MpinLockScreen({ navigation }: Props) {
           >
             <Text style={styles.altText}>Sign in with password / switch account</Text>
           </TouchableOpacity>
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardSafeScroll>
     </View>
   );
 }

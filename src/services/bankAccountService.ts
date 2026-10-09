@@ -1,16 +1,15 @@
-import { supabase } from '../lib/supabase';
 import { BankAccount, BankAccountType } from '../types/bankAccount';
 import { BankAccount as DropdownBankAccount } from '../types/fundRequest';
 import { detectBankNameFromIfsc } from '../utils/bankName';
-import { isMissingTableError } from '../utils/supabaseErrors';
+import { apiRequest } from '../lib/api';
 
-type BankAccountRow = {
+type BankApiRow = {
   id: string;
-  bank_name: string;
-  account_number: string;
-  ifsc_code: string;
-  account_type: string;
-  is_primary: boolean;
+  bankName: string;
+  accountNumber: string;
+  ifscCode: string;
+  accountType: string;
+  isPrimary: boolean;
 };
 
 function maskAccountNumber(accountNumber: string): string {
@@ -35,55 +34,43 @@ export function formatBankAccountLabel(
   return `${bankName} ${maskAccountNumber(accountNumber)}`;
 }
 
-function mapBankAccountRow(row: BankAccountRow): BankAccount {
-  const bankName = row.bank_name.trim();
-  const accountType = (row.account_type === 'Current' ? 'Current' : 'Savings') as BankAccountType;
+function mapBank(row: BankApiRow): BankAccount {
+  const bankName = row.bankName.trim();
+  const accountType = (
+    row.accountType === 'Current' ? 'Current' : 'Savings'
+  ) as BankAccountType;
 
   return {
     id: row.id,
     bankName,
     initial: (bankName.charAt(0) || 'B').toUpperCase(),
-    maskedNumber: maskAccountNumber(row.account_number),
-    ifsc: row.ifsc_code,
+    maskedNumber: maskAccountNumber(row.accountNumber),
+    ifsc: row.ifscCode,
     accountType,
-    badge: row.is_primary ? 'Primary' : 'Verified',
-    isPrimary: row.is_primary,
+    badge: row.isPrimary ? 'Primary' : 'Verified',
+    isPrimary: row.isPrimary,
   };
 }
 
-export async function getUserBankAccountsList(userId: string): Promise<BankAccount[]> {
-  const { data, error } = await supabase
-    .from('bank_accounts')
-    .select('id, bank_name, account_number, ifsc_code, account_type, is_primary')
-    .eq('user_id', userId)
-    .order('is_primary', { ascending: false })
-    .order('created_at', { ascending: true });
-
-  if (error) {
-    if (isMissingTableError(error)) {
-      return [];
-    }
-    throw new Error(error.message);
-  }
-
-  return (data ?? []).map((row) => mapBankAccountRow(row as BankAccountRow));
+async function fetchBanks(): Promise<BankApiRow[]> {
+  const data = await apiRequest<{ banks: BankApiRow[] }>('/api/mobile/banks');
+  return data.banks ?? [];
 }
 
-/** Minimal shape for fund request / withdrawal dropdowns */
-export async function getUserBankAccounts(userId: string): Promise<DropdownBankAccount[]> {
-  const { data, error } = await supabase
-    .from('bank_accounts')
-    .select('id, bank_name, account_number')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: true });
+export async function getUserBankAccountsList(
+  _userId?: string
+): Promise<BankAccount[]> {
+  const banks = await fetchBanks();
+  return banks.map(mapBank);
+}
 
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return (data ?? []).map((row) => ({
+export async function getUserBankAccounts(
+  _userId?: string
+): Promise<DropdownBankAccount[]> {
+  const banks = await fetchBanks();
+  return banks.map((row) => ({
     id: row.id,
-    label: formatBankAccountLabel(row.bank_name, row.account_number),
+    label: formatBankAccountLabel(row.bankName, row.accountNumber),
   }));
 }
 
@@ -95,48 +82,26 @@ export type CreateBankAccountInput = {
 };
 
 export async function createBankAccount(
-  userId: string,
+  _userId: string,
   input: CreateBankAccountInput
 ): Promise<void> {
-  const { count, error: countError } = await supabase
-    .from('bank_accounts')
-    .select('id', { count: 'exact', head: true })
-    .eq('user_id', userId);
-
-  if (countError) {
-    throw new Error(countError.message);
-  }
-
   const ifscCode = input.ifscCode.trim().toUpperCase();
-  const { error } = await supabase.from('bank_accounts').insert({
-    user_id: userId,
-    account_holder_name: input.accountHolderName.trim(),
-    account_number: input.accountNumber.trim(),
-    ifsc_code: ifscCode,
-    bank_name: resolveBankName(ifscCode),
-    account_type: input.accountType,
-    is_primary: (count ?? 0) === 0,
+  await apiRequest('/api/mobile/banks', {
+    method: 'POST',
+    body: JSON.stringify({
+      accountHolderName: input.accountHolderName.trim(),
+      accountNumber: input.accountNumber.trim(),
+      ifscCode,
+      accountType: input.accountType,
+      bankName: resolveBankName(ifscCode),
+    }),
   });
-
-  if (error) {
-    throw new Error(error.message);
-  }
 }
 
 export async function verifyBankAccountOwnership(
   userId: string,
   bankAccountId: string
 ): Promise<boolean> {
-  const { data, error } = await supabase
-    .from('bank_accounts')
-    .select('id')
-    .eq('user_id', userId)
-    .eq('id', bankAccountId)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return Boolean(data);
+  const banks = await getUserBankAccounts(userId);
+  return banks.some((bank) => bank.id === bankAccountId);
 }

@@ -13,11 +13,9 @@ import NotificationToastBanner, {
   NotificationToastPayload,
 } from '../components/NotificationToastBanner';
 import { navigationRef } from '../navigation/navigationRef';
-import { supabase } from '../lib/supabase';
 import {
   getNotificationsCreatedAfter,
   InvestorNotification,
-  mapNotificationKind,
 } from '../services/notificationService';
 
 const POLL_INTERVAL_MS = 8000;
@@ -41,27 +39,6 @@ function toToast(item: InvestorNotification): NotificationToastPayload {
     body: item.body,
     decision: item.decision,
     kind: item.kind,
-  };
-}
-
-function mapRealtimeRow(
-  row: Record<string, unknown>
-): NotificationToastPayload | null {
-  const id = typeof row.id === 'string' ? row.id : null;
-  const title = typeof row.title === 'string' ? row.title : null;
-  const body = typeof row.body === 'string' ? row.body : null;
-  if (!id || !title || !body) {
-    return null;
-  }
-
-  return {
-    id,
-    title,
-    body,
-    decision: row.decision === 'rejected' ? 'rejected' : 'approved',
-    kind: mapNotificationKind(
-      typeof row.kind === 'string' ? row.kind : 'investment'
-    ),
   };
 }
 
@@ -143,40 +120,6 @@ export function NotificationRealtimeProvider({
       return;
     }
 
-    const channel = supabase
-      .channel(`investor-notifications:${userId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'notifications',
-          filter: `user_id=eq.${userId}`,
-        },
-        (payload) => {
-          const next = mapRealtimeRow(
-            (payload.new ?? {}) as Record<string, unknown>
-          );
-          if (!next) {
-            return;
-          }
-          const createdAt =
-            typeof (payload.new as { created_at?: string })?.created_at ===
-            'string'
-              ? (payload.new as { created_at: string }).created_at
-              : null;
-          if (createdAt && createdAt > sinceIsoRef.current) {
-            sinceIsoRef.current = createdAt;
-          }
-          presentToast(next);
-        }
-      )
-      .subscribe((status) => {
-        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          console.warn('Notification realtime channel:', status);
-        }
-      });
-
     void pollForNew();
     const intervalId = setInterval(() => {
       void pollForNew();
@@ -192,7 +135,6 @@ export function NotificationRealtimeProvider({
     return () => {
       clearInterval(intervalId);
       appSub.remove();
-      void supabase.removeChannel(channel);
     };
   }, [userId, presentToast, pollForNew]);
 

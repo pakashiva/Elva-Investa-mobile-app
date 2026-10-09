@@ -100,8 +100,11 @@ function AuthNavigationHandler() {
       return;
     }
 
+    const alreadyVerified =
+      session.customer?.mobileVerified === true || mobileVerified === true;
     const needsMobileVerification =
-      otpFlow === 'registration' || mobileVerified === false;
+      !alreadyVerified &&
+      (otpFlow === 'registration' || mobileVerified === false);
 
     if (needsMobileVerification) {
       if (

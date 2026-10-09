@@ -1,8 +1,8 @@
+import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 
 type ExtraConfig = {
-  supabaseUrl?: string;
-  supabasePublishableKey?: string;
+  apiBaseUrl?: string;
 };
 
 const extra = (Constants.expoConfig?.extra ?? {}) as ExtraConfig;
@@ -15,43 +15,78 @@ function readEnv(name: string): string | undefined {
   return undefined;
 }
 
-export function getSupabaseUrl(): string {
-  const url =
-    readEnv('EXPO_PUBLIC_SUPABASE_URL') ??
-    readEnv('NEXT_PUBLIC_SUPABASE_URL') ??
-    extra.supabaseUrl?.trim();
-
-  if (!url) {
-    throw new Error(
-      'Missing EXPO_PUBLIC_SUPABASE_URL. Add it to your .env file and restart Expo with -c.'
-    );
-  }
-  return url;
+function stripTrailingSlash(url: string): string {
+  return url.replace(/\/+$/, '');
 }
 
-export function getSupabasePublishableKey(): string {
-  const key =
-    readEnv('EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY') ??
-    readEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY') ??
-    extra.supabasePublishableKey?.trim();
+function lanHostFromExpo(): string | null {
+  const hostUri =
+    Constants.expoConfig?.hostUri ??
+    Constants.linkingUri ??
+    '';
+  const host = hostUri
+    .replace(/^exp:\/\//, '')
+    .replace(/^https?:\/\//, '')
+    .split('/')[0]
+    .split(':')[0]
+    .trim();
 
-  if (!key) {
+  if (!host || host === 'localhost' || host === '127.0.0.1') {
+    return null;
+  }
+  return host;
+}
+
+function isIpv4(host: string): boolean {
+  return /^\d{1,3}(?:\.\d{1,3}){3}$/.test(host);
+}
+
+function isLoopbackHost(url: string): boolean {
+  const host = url
+    .replace(/^https?:\/\//, '')
+    .split('/')[0]
+    .split(':')[0]
+    .trim()
+    .toLowerCase();
+  return host === 'localhost' || host === '127.0.0.1';
+}
+
+function isReleaseBuild(): boolean {
+  const execution = Constants.executionEnvironment;
+  return (
+    execution === 'standalone' ||
+    execution === 'bare' ||
+    Constants.appOwnership === 'standalone'
+  );
+}
+
+export function getApiBaseUrl(): string {
+  const configured =
+    readEnv('EXPO_PUBLIC_API_URL') ?? extra.apiBaseUrl?.trim();
+  const lanHost = lanHostFromExpo();
+
+  if (configured) {
+    const base = stripTrailingSlash(configured);
+    // A phone cannot reach the PC via 127.0.0.1. Use Expo's LAN host instead.
+    if (isLoopbackHost(base) && lanHost && isIpv4(lanHost)) {
+      return `http://${lanHost}:4000`;
+    }
+    return base;
+  }
+
+  if (isReleaseBuild()) {
     throw new Error(
-      'Missing EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY. Add it to your .env file and restart Expo with -c.'
+      'EXPO_PUBLIC_API_URL is not set for this build. Set it on EAS preview/production and rebuild.',
     );
   }
 
-  // Guard against a truncated key (common copy/paste mistake).
-  if (!key.startsWith('sb_publishable_') && !key.startsWith('eyJ')) {
-    throw new Error(
-      'Supabase key format looks wrong. Use the publishable key (sb_publishable_...) or legacy anon JWT from the Supabase dashboard.'
-    );
-  }
-  if (key.startsWith('sb_publishable_') && key.length < 40) {
-    throw new Error(
-      'Supabase publishable key looks truncated. Paste the full key from Supabase → Project Settings → API Keys.'
-    );
+  if (lanHost) {
+    return `http://${lanHost}:4000`;
   }
 
-  return key;
+  if (Platform.OS === 'android') {
+    return 'http://10.0.2.2:4000';
+  }
+
+  return 'http://127.0.0.1:4000';
 }

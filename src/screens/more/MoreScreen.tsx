@@ -102,7 +102,7 @@ export default function MoreScreen() {
       >
         <View style={styles.menuCard}>
           <LinearGradient
-            colors={['#3D2E8A', '#2B2D6B']}
+            colors={['#0D2D5B', '#1463C6']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.brandBanner}
@@ -199,18 +199,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   brandLogoWrap: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 96,
+    height: 96,
+    borderRadius: 22,
+    overflow: 'hidden',
     marginBottom: 12,
-    padding: 8,
+    backgroundColor: '#000000',
   },
   brandLogo: {
-    width: 52,
-    height: 52,
+    width: 96,
+    height: 96,
   },
   brandName: {
     fontSize: 18,

@@ -10,14 +10,20 @@ type Props = {
 export default function BrandLogo({ size = 96, imageStyle }: Props) {
   return (
     <View style={styles.wrap}>
-      <View style={[styles.pill, { width: size + 24, height: size * 0.62 }]}>
-        <Image
-          source={BRAND_LOGO}
-          style={[styles.logo, { width: size, height: size * 0.72 }, imageStyle]}
-          resizeMode="contain"
-          accessibilityLabel="Venkatesh Traders logo"
-        />
-      </View>
+      <Image
+        source={BRAND_LOGO}
+        style={[
+          styles.logo,
+          {
+            width: size,
+            height: size,
+            borderRadius: Math.round(size * 0.18),
+          },
+          imageStyle,
+        ]}
+        resizeMode="contain"
+        accessibilityLabel="ELVA Investa logo"
+      />
     </View>
   );
 }
@@ -27,14 +33,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 18,
   },
-  pill: {
-    borderRadius: 999,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 12,
-  },
   logo: {
-    backgroundColor: 'transparent',
+    backgroundColor: '#000000',
   },
 });

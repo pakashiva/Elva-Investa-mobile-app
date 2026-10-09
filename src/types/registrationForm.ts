@@ -7,6 +7,7 @@ export type DocumentUploadValue = {
 };
 
 export type RegistrationFormValues = {
+  clientCode: string;
   fullName: string;
   mobileNumber: string;
   emailAddress: string;

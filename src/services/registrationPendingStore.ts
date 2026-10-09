@@ -1,22 +1,19 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { RegistrationFormValues } from '../types/registrationForm';
 
-const PENDING_KEY_PREFIX = 'pending_registration:';
+const SIGNUP_KEY = 'pending_registration:signup';
 
 export async function savePendingRegistration(
-  userId: string,
-  form: RegistrationFormValues
+  form: RegistrationFormValues,
+  _userId?: string
 ): Promise<void> {
-  await AsyncStorage.setItem(
-    `${PENDING_KEY_PREFIX}${userId}`,
-    JSON.stringify(form)
-  );
+  await AsyncStorage.setItem(SIGNUP_KEY, JSON.stringify(form));
 }
 
 export async function loadPendingRegistration(
-  userId: string
+  _userId?: string
 ): Promise<RegistrationFormValues | null> {
-  const raw = await AsyncStorage.getItem(`${PENDING_KEY_PREFIX}${userId}`);
+  const raw = await AsyncStorage.getItem(SIGNUP_KEY);
   if (!raw) {
     return null;
   }
@@ -27,6 +24,6 @@ export async function loadPendingRegistration(
   }
 }
 
-export async function clearPendingRegistration(userId: string): Promise<void> {
-  await AsyncStorage.removeItem(`${PENDING_KEY_PREFIX}${userId}`);
+export async function clearPendingRegistration(_userId?: string): Promise<void> {
+  await AsyncStorage.removeItem(SIGNUP_KEY);
 }

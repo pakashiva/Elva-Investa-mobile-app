@@ -1,8 +1,4 @@
-import { supabase } from '../lib/supabase';
-import {
-  isMissingTableError,
-  withJwtRetry,
-} from '../utils/supabaseErrors';
+import { apiRequest } from '../lib/api';
 
 export type NotificationKind =
   | 'investment'
@@ -26,9 +22,12 @@ type NotificationRow = {
   title: string;
   body: string;
   decision: string;
-  reference_id: string | null;
-  is_read: boolean;
-  created_at: string;
+  referenceId?: string | null;
+  reference_id?: string | null;
+  isRead?: boolean;
+  is_read?: boolean;
+  createdAt?: string;
+  created_at?: string;
 };
 
 export function mapNotificationKind(kind: string): NotificationKind {
@@ -44,126 +43,51 @@ function mapRow(row: NotificationRow): InvestorNotification {
     title: row.title,
     body: row.body,
     decision: row.decision === 'rejected' ? 'rejected' : 'approved',
-    referenceId: row.reference_id,
-    isRead: row.is_read,
-    createdAt: row.created_at,
+    referenceId: row.referenceId ?? row.reference_id ?? null,
+    isRead: Boolean(row.isRead ?? row.is_read),
+    createdAt: String(row.createdAt ?? row.created_at ?? ''),
   };
 }
 
-async function fetchNotifications(
-  userId: string
-): Promise<InvestorNotification[]> {
-  const { data, error } = await supabase
-    .from('notifications')
-    .select(
-      'id, kind, title, body, decision, reference_id, is_read, created_at'
-    )
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false });
-
-  if (error) {
-    if (isMissingTableError(error)) {
-      return [];
-    }
-    throw new Error(error.message);
-  }
-
-  return (data ?? []).map(mapRow);
-}
-
-async function fetchUnreadCount(userId: string): Promise<number> {
-  const { count, error } = await supabase
-    .from('notifications')
-    .select('id', { count: 'exact', head: true })
-    .eq('user_id', userId)
-    .eq('is_read', false);
-
-  if (error) {
-    if (isMissingTableError(error)) {
-      return 0;
-    }
-    throw new Error(error.message);
-  }
-
-  return count ?? 0;
-}
-
-async function markAllRead(userId: string): Promise<void> {
-  const { error } = await supabase
-    .from('notifications')
-    .update({ is_read: true })
-    .eq('user_id', userId)
-    .eq('is_read', false);
-
-  if (error) {
-    if (isMissingTableError(error)) {
-      return;
-    }
-    throw new Error(error.message);
-  }
-}
-
-async function markOneRead(userId: string, notificationId: string): Promise<void> {
-  const { error } = await supabase
-    .from('notifications')
-    .update({ is_read: true })
-    .eq('user_id', userId)
-    .eq('id', notificationId);
-
-  if (error) {
-    if (isMissingTableError(error)) {
-      return;
-    }
-    throw new Error(error.message);
-  }
-}
-
 export async function getInvestorNotifications(
-  userId: string
+  _userId?: string
 ): Promise<InvestorNotification[]> {
-  return withJwtRetry(() => fetchNotifications(userId));
+  const data = await apiRequest<{ notifications: NotificationRow[] }>(
+    '/api/mobile/notifications'
+  );
+  return (data.notifications ?? []).map(mapRow);
 }
 
 export async function getUnreadNotificationCount(
-  userId: string
+  _userId?: string
 ): Promise<number> {
-  return withJwtRetry(() => fetchUnreadCount(userId));
+  const data = await apiRequest<{ unreadCount: number }>(
+    '/api/mobile/notifications/unread-count'
+  );
+  return Number(data.unreadCount ?? 0);
 }
 
-export async function markAllNotificationsRead(userId: string): Promise<void> {
-  return withJwtRetry(() => markAllRead(userId));
+export async function markAllNotificationsRead(
+  _userId?: string
+): Promise<void> {
+  await apiRequest('/api/mobile/notifications/read-all', { method: 'POST' });
 }
 
 export async function markNotificationRead(
-  userId: string,
+  _userId: string,
   notificationId: string
 ): Promise<void> {
-  return withJwtRetry(() => markOneRead(userId, notificationId));
+  await apiRequest(`/api/mobile/notifications/${notificationId}/read`, {
+    method: 'POST',
+  });
 }
 
-/** Notifications created after `sinceIso` (exclusive), newest first. */
 export async function getNotificationsCreatedAfter(
-  userId: string,
+  _userId: string,
   sinceIso: string
 ): Promise<InvestorNotification[]> {
-  return withJwtRetry(async () => {
-    const { data, error } = await supabase
-      .from('notifications')
-      .select(
-        'id, kind, title, body, decision, reference_id, is_read, created_at'
-      )
-      .eq('user_id', userId)
-      .gt('created_at', sinceIso)
-      .order('created_at', { ascending: false })
-      .limit(10);
-
-    if (error) {
-      if (isMissingTableError(error)) {
-        return [];
-      }
-      throw new Error(error.message);
-    }
-
-    return (data ?? []).map(mapRow);
-  });
+  const data = await apiRequest<{ notifications: NotificationRow[] }>(
+    `/api/mobile/notifications?after=${encodeURIComponent(sinceIso)}`
+  );
+  return (data.notifications ?? []).map(mapRow);
 }

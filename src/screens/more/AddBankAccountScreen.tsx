@@ -3,16 +3,14 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
-  KeyboardAvoidingView,
-  Platform,
   Alert,
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import BankFormField from '../../components/bank/BankFormField';
+import KeyboardSafeScroll from '../../components/form/KeyboardSafeScroll';
 import AccountTypeSelector from '../../components/bank/AccountTypeSelector';
 import { useAuth } from '../../contexts/AuthContext';
 import { ADD_BANK_ACCOUNT_DEFAULTS } from '../../data/bankAccountForm';
@@ -122,16 +120,7 @@ export default function AddBankAccountScreen({ navigation }: Props) {
         </View>
       </View>
 
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <ScrollView
-          style={styles.flex}
-          contentContainerStyle={styles.content}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
+      <KeyboardSafeScroll contentContainerStyle={styles.content}>
           <View style={styles.securityBanner}>
             <Ionicons
               name="shield-checkmark"
@@ -225,8 +214,7 @@ export default function AddBankAccountScreen({ navigation }: Props) {
               )}
             </TouchableOpacity>
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardSafeScroll>
     </View>
   );
 }

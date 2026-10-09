@@ -7,22 +7,21 @@ function formatCountdown(seconds: number): string {
 }
 
 type OtpTimersOptions = {
-  /** How long the OTP stays valid for verify. */
   expiresInSeconds: number;
-  /** How soon the user can request another SMS (independent of expiry). */
   resendCooldownSeconds: number;
 };
 
 /**
  * Separate OTP expiry vs resend cooldown.
- * Users can resend after a short wait even while the previous code is still valid.
+ * Timers start only after reset() — typically when an OTP is actually sent.
  */
 export function useOtpCountdown({
   expiresInSeconds,
   resendCooldownSeconds,
 }: OtpTimersOptions) {
-  const [expiresLeft, setExpiresLeft] = useState(expiresInSeconds);
-  const [resendLeft, setResendLeft] = useState(resendCooldownSeconds);
+  const [started, setStarted] = useState(false);
+  const [expiresLeft, setExpiresLeft] = useState(0);
+  const [resendLeft, setResendLeft] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const clearTimer = useCallback(() => {
@@ -35,6 +34,7 @@ export function useOtpCountdown({
   const startTimers = useCallback(
     (expiresSeconds: number, resendSeconds: number) => {
       clearTimer();
+      setStarted(true);
       setExpiresLeft(expiresSeconds);
       setResendLeft(resendSeconds);
       intervalRef.current = setInterval(() => {
@@ -45,10 +45,7 @@ export function useOtpCountdown({
     [clearTimer]
   );
 
-  useEffect(() => {
-    startTimers(expiresInSeconds, resendCooldownSeconds);
-    return clearTimer;
-  }, [clearTimer, expiresInSeconds, resendCooldownSeconds, startTimers]);
+  useEffect(() => () => clearTimer(), [clearTimer]);
 
   const reset = useCallback(
     (
@@ -65,8 +62,9 @@ export function useOtpCountdown({
     resendLeft,
     formattedExpires: formatCountdown(expiresLeft),
     formattedResend: formatCountdown(resendLeft),
-    canResend: resendLeft === 0,
-    isExpired: expiresLeft === 0,
+    canResend: started && resendLeft === 0,
+    isExpired: started && expiresLeft === 0,
+    started,
     reset,
   };
 }

@@ -1,17 +1,10 @@
-import { processUserInvestmentInterest } from './investmentInterestService';
-import { supabase } from '../lib/supabase';
 import { formatInterestRateMonthly } from '../utils/investmentFormat';
-import {
-  isMissingTableError,
-  withJwtRetry,
-} from '../utils/supabaseErrors';
+import { getHomeDashboard } from './homeService';
 
 export type PerformanceRange = '1Y' | 'ALL';
 
 export type ChartPoint = {
-  /** 0–1 along X axis */
   x: number;
-  /** 0–1 along Y axis where 0 is top (higher values) */
   y: number;
 };
 
@@ -124,7 +117,6 @@ function buildSeriesFromInvestments(
     values.push(portfolioValueAt(investments, t));
   }
 
-  // Ensure last point matches current book value when possible
   const currentBook = investments.reduce(
     (sum, inv) =>
       sum + Number(inv.fund_amount) + Number(inv.total_earnings ?? 0),
@@ -140,7 +132,6 @@ function buildSeriesFromInvestments(
   const points: ChartPoint[] = values.map((value, index) => {
     const x = index / (sampleCount - 1);
     const normalized = span > 0 ? (value - min) / span : 0.5;
-    // Invert: higher portfolio value → lower Y (closer to top)
     const y = 0.78 - normalized * 0.62;
     return { x, y };
   });
@@ -185,36 +176,22 @@ function formatAverageReturn(investments: InvestmentRow[]): string {
   return `${formatInterestRateMonthly(avgRate)} avg`;
 }
 
-async function fetchPerformanceSeries(
-  userId: string,
-  range: PerformanceRange
-): Promise<PerformanceSeries> {
-  await processUserInvestmentInterest(userId);
-
-  const { data, error } = await supabase
-    .from('investments')
-    .select(
-      'name, fund_amount, total_earnings, interest_rate, invested_date, pay_date, completed_interest_periods, tds_percent'
-    )
-    .eq('user_id', userId)
-    .eq('status', 'Active');
-
-  if (error) {
-    if (isMissingTableError(error)) {
-      return EMPTY_SERIES;
-    }
-    throw new Error(error.message);
-  }
-
-  return buildSeriesFromInvestments(data ?? [], range);
-}
-
 export async function getPerformanceSeries(
-  userId: string,
+  _userId: string,
   range: PerformanceRange
 ): Promise<PerformanceSeries> {
-  return withJwtRetry(() => fetchPerformanceSeries(userId, range));
+  const dashboard = await getHomeDashboard();
+  const investments: InvestmentRow[] = dashboard.chartInvestments.map((row) => ({
+    name: row.name,
+    fund_amount: row.fundAmount,
+    total_earnings: row.totalEarnings,
+    interest_rate: row.interestRate,
+    invested_date: row.investedDate,
+    pay_date: null,
+    completed_interest_periods: row.completedInterestPeriods,
+    tds_percent: row.tdsPercent,
+  }));
+  return buildSeriesFromInvestments(investments, range);
 }
 
-/** Exported for tests */
 export { buildSeriesFromInvestments, EMPTY_SERIES };

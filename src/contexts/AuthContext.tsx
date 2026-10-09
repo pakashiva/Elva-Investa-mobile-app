@@ -6,26 +6,24 @@ import React, {
   useMemo,
   useState,
 } from 'react';
-import { Session } from '@supabase/supabase-js';
-import { supabase } from '../lib/supabase';
+import { AppSession } from '../types/auth';
 import { getMobileVerifiedStatus } from '../services/profileService';
 import { loadPendingRegistration } from '../services/registrationPendingStore';
 import { isUnlockWindowValid } from '../services/sessionUnlockStore';
+import {
+  getStoredSession,
+  subscribeSession,
+} from '../services/sessionStore';
 import { OtpMode } from '../types/otp';
 
 export type OtpFlow = OtpMode | null;
 
 type AuthContextValue = {
-  session: Session | null;
+  session: AppSession | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  /** 15-day unlock window still valid for this user. */
   unlockWindowValid: boolean | null;
   isUnlockLoading: boolean;
-  /**
-   * True after successful MPIN unlock or password login this process.
-   * Resets on cold start so MPIN is required every app open when session is valid.
-   */
   appUnlocked: boolean;
   mobileVerified: boolean | null;
   isVerificationLoading: boolean;
@@ -43,7 +41,7 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
+  const [session, setSession] = useState<AppSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [unlockWindowValid, setUnlockWindowValid] = useState<boolean | null>(
     null
@@ -56,6 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [bypassMobileVerification, setBypassMobileVerification] =
     useState(false);
   const profileRetryUserIdRef = React.useRef<string | null>(null);
+  const mobileVerifiedRequestRef = React.useRef(0);
 
   const setOtpFlow = useCallback((flow: OtpFlow) => {
     setOtpFlowState(flow);
@@ -99,9 +98,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const loadMobileVerified = useCallback(
     async (userId: string | undefined, showLoading = true) => {
       if (!userId) {
-        setMobileVerified(null);
         return null;
       }
+
+      const requestId = mobileVerifiedRequestRef.current + 1;
+      mobileVerifiedRequestRef.current = requestId;
 
       if (showLoading) {
         setIsVerificationLoading(true);
@@ -109,6 +110,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       try {
         const verified = await getMobileVerifiedStatus(userId);
+        if (mobileVerifiedRequestRef.current !== requestId) {
+          return verified;
+        }
+        const sessionNow = await getStoredSession();
+        if (sessionNow?.customer?.mobileVerified) {
+          setMobileVerified(true);
+          return true;
+        }
         setMobileVerified(verified);
         return verified;
       } catch (error) {
@@ -116,10 +125,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           'Failed to load mobile verification status:',
           error instanceof Error ? error.message : error
         );
-        setMobileVerified(null);
+        if (mobileVerifiedRequestRef.current === requestId) {
+          const sessionNow = await getStoredSession();
+          if (sessionNow?.customer?.mobileVerified) {
+            setMobileVerified(true);
+            return true;
+          }
+        }
         return null;
       } finally {
-        if (showLoading) {
+        if (showLoading && mobileVerifiedRequestRef.current === requestId) {
           setIsVerificationLoading(false);
         }
       }
@@ -134,35 +149,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
-    supabase.auth.getSession().then(({ data, error }) => {
-      if (!mounted) {
-        return;
-      }
-      if (error) {
-        console.error('Failed to restore auth session:', error.message);
-      }
-      setSession(data.session);
-      setIsLoading(false);
-    });
+    getStoredSession()
+      .then((restored) => {
+        if (!mounted) {
+          return;
+        }
+        setSession(restored);
+        setIsLoading(false);
+      })
+      .catch((error) => {
+        console.error(
+          'Failed to restore auth session:',
+          error instanceof Error ? error.message : error
+        );
+        if (mounted) {
+          setSession(null);
+          setIsLoading(false);
+        }
+      });
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, nextSession) => {
+    const unsubscribe = subscribeSession((nextSession) => {
       setSession(nextSession);
       setIsLoading(false);
-
-      if (event === 'SIGNED_OUT') {
+      if (!nextSession) {
         setBypassMobileVerification(false);
         setOtpFlowState(null);
         setMobileVerified(null);
         setUnlockWindowValid(null);
         setAppUnlocked(false);
+        return;
+      }
+      if (nextSession.customer?.mobileVerified) {
+        setMobileVerified(true);
       }
     });
 
     return () => {
       mounted = false;
-      subscription.unsubscribe();
+      unsubscribe();
     };
   }, []);
 
@@ -227,14 +251,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       !userId ||
       bypassMobileVerification ||
       isVerificationLoading ||
-      mobileVerified !== null ||
+      mobileVerified !== false ||
       otpFlow !== null
     ) {
       return;
     }
 
     let cancelled = false;
-    void loadPendingRegistration(userId).then((pending) => {
+    void loadPendingRegistration().then((pending) => {
       if (!cancelled && pending) {
         setOtpFlowState('registration');
       }

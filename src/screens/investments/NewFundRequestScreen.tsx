@@ -3,10 +3,7 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
-  KeyboardAvoidingView,
-  Platform,
   Alert,
   ActivityIndicator,
 } from 'react-native';
@@ -17,6 +14,7 @@ import FormTextField from '../../components/form/FormTextField';
 import FormSelectField from '../../components/form/FormSelectField';
 import FormCheckbox from '../../components/form/FormCheckbox';
 import PayableInfoBanner from '../../components/form/PayableInfoBanner';
+import KeyboardSafeScroll from '../../components/form/KeyboardSafeScroll';
 import { useAuth } from '../../contexts/AuthContext';
 import {
   FUND_AMOUNT_MINIMUM,
@@ -125,7 +123,7 @@ export default function NewFundRequestScreen({ navigation }: Props) {
     }
 
     const normalized = normalizeReferralCodeInput(referralCode);
-    if (!normalized || normalized.length < 7) {
+    if (normalized.length !== 8) {
       setReferrerName(null);
       return;
     }
@@ -199,13 +197,21 @@ export default function NewFundRequestScreen({ navigation }: Props) {
       return;
     }
 
-    if (hasReferralCode && referralCode.trim()) {
-      const validation = await validateReferralCodeForSubmit(referralCode);
+    if (hasReferralCode) {
+      const normalized = normalizeReferralCodeInput(referralCode);
+      if (!/^[A-Z0-9]{8}$/.test(normalized)) {
+        Alert.alert(
+          'Referral code required',
+          'Enter a valid 8-character referral code, or uncheck the referral option.'
+        );
+        return;
+      }
+      const validation = await validateReferralCodeForSubmit(normalized);
       if (!validation.valid) {
         Alert.alert(
           'Invalid referral code',
           validation.errorMessage ??
-            'Please enter a valid referral code or leave it blank.'
+            'Please enter a valid referral code for this trader, or uncheck the option.'
         );
         return;
       }
@@ -291,16 +297,7 @@ export default function NewFundRequestScreen({ navigation }: Props) {
         </TouchableOpacity>
       </View>
 
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <ScrollView
-          style={styles.flex}
-          contentContainerStyle={styles.content}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
+      <KeyboardSafeScroll contentContainerStyle={styles.content}>
           {isLoadingOptions ? (
             <View style={styles.loadingWrap}>
               <ActivityIndicator size="small" color={colors.primarySoft} />
@@ -391,12 +388,13 @@ export default function NewFundRequestScreen({ navigation }: Props) {
             <View>
               <FormTextField
                 label="Referral Code"
-                placeholder="e.g. 482913rahulsharma"
+                placeholder="8-character code, e.g. A1B2C3D4"
                 value={referralCode}
                 onChangeText={(text) =>
-                  setReferralCode(normalizeReferralCodeInput(text))
+                  setReferralCode(normalizeReferralCodeInput(text).slice(0, 8))
                 }
-                autoCapitalize="none"
+                autoCapitalize="characters"
+                maxLength={8}
                 autoCorrect={false}
               />
               {referrerName ? (
@@ -440,8 +438,7 @@ export default function NewFundRequestScreen({ navigation }: Props) {
               )}
             </TouchableOpacity>
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardSafeScroll>
     </View>
   );
 }

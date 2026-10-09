@@ -22,6 +22,13 @@ export function validateRegistrationForm(
 ): RegistrationFormErrors {
   const errors: RegistrationFormErrors = {};
 
+  const clientCode = values.clientCode.trim().toUpperCase();
+  if (isEmpty(clientCode)) {
+    errors.clientCode = 'Client code is required';
+  } else if (!/^[A-Z0-9]{3,20}$/.test(clientCode)) {
+    errors.clientCode = 'Enter the 3–20 character client code from your trader';
+  }
+
   if (isEmpty(values.fullName)) errors.fullName = 'Full name is required';
 
   if (isEmpty(values.mobileNumber)) {
